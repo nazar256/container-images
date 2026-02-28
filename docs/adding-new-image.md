@@ -37,4 +37,4 @@ On `push` to `master`, only the matching image workflow should run because of `p
 ## 5) Verify published image names
 
 - GHCR: `ghcr.io/<owner>/<image_name>`
-- Docker Hub (optional): `<dockerhub-username>/<repo>-<image_name>`
+- Docker Hub (optional): `<dockerhub-username>/<image_name>`

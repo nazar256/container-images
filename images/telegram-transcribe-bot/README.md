@@ -67,5 +67,5 @@ docker pull ghcr.io/<owner>/telegram-transcribe-bot:latest
 ## Pull from Docker Hub
 
 ```bash
-docker pull <dockerhub-username>/<repo>-telegram-transcribe-bot:latest
+docker pull <dockerhub-username>/telegram-transcribe-bot:latest
 ```

@@ -59,7 +59,7 @@ docker pull ghcr.io/<owner>/$image_name:latest
 ## Pull from Docker Hub
 
 \`\`\`bash
-docker pull <dockerhub-username>/<repo>-$image_name:latest
+docker pull <dockerhub-username>/$image_name:latest
 \`\`\`
 EOF
 
@@ -95,7 +95,7 @@ if [ ! -f "$readme_file" ]; then
   exit 0
 fi
 
-row="| \`$image_name\` | \`images/$image_name\` | \`docker build -t $image_name:local -f images/$image_name/Dockerfile images/$image_name\` | \`docker pull ghcr.io/<owner>/$image_name:latest\` | \`docker pull <dockerhub-username>/<repo>-$image_name:latest\` | \`docker run --rm ghcr.io/<owner>/$image_name:latest\` |"
+row="| \`$image_name\` | \`images/$image_name\` | \`docker build -t $image_name:local -f images/$image_name/Dockerfile images/$image_name\` | \`docker pull ghcr.io/<owner>/$image_name:latest\` | \`docker pull <dockerhub-username>/$image_name:latest\` | \`docker run --rm ghcr.io/<owner>/$image_name:latest\` |"
 
 if grep -Fq "$row" "$readme_file"; then
   echo "Scaffolded $image_name"

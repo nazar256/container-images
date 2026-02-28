@@ -24,7 +24,7 @@
 ## Docker Hub images are not pushed
 
 - Docker Hub push is conditional. If secrets are missing, workflow will publish only to GHCR.
-- Confirm expected target naming: `<dockerhub-username>/<repo>-<image_name>`.
+- Confirm expected target naming: `<dockerhub-username>/<image_name>`.
 
 ## Multi-arch build errors
 

@@ -33,7 +33,7 @@ docker run --rm my-image:local
 
 - Optional Docker Hub target format:
 
-  `<dockerhub-username>/<repo>-<image_name>`
+  `<dockerhub-username>/<image_name>`
 
 - Tags:
   - `latest` (only on default branch `master`)
@@ -50,5 +50,5 @@ See details in `docs/workflows.md` and `docs/registry-ghcr.md`.
 <!-- IMAGES-LIST:START -->
 | Image | Path | Build locally | Pull from GHCR | Pull from Docker Hub | Run |
 | --- | --- | --- | --- | --- | --- |
-| `telegram-transcribe-bot` | `images/telegram-transcribe-bot` | `docker build -t telegram-transcribe-bot:local -f images/telegram-transcribe-bot/Dockerfile images/telegram-transcribe-bot` | `docker pull ghcr.io/<owner>/telegram-transcribe-bot:latest` | `docker pull <dockerhub-username>/<repo>-telegram-transcribe-bot:latest` | `docker run --rm ghcr.io/<owner>/telegram-transcribe-bot:latest` |
+| `telegram-transcribe-bot` | `images/telegram-transcribe-bot` | `docker build -t telegram-transcribe-bot:local -f images/telegram-transcribe-bot/Dockerfile images/telegram-transcribe-bot` | `docker pull ghcr.io/<owner>/telegram-transcribe-bot:latest` | `docker pull <dockerhub-username>/telegram-transcribe-bot:latest` | `docker run --rm ghcr.io/<owner>/telegram-transcribe-bot:latest` |
 <!-- IMAGES-LIST:END -->
