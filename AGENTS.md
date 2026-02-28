@@ -24,6 +24,13 @@ Rules for automation agents working in this repository.
   - `.github/workflows/_reusable-build-and-push.yml`
 - If reusable workflow changes, ensure every image workflow still references it in `paths`.
 
+## Local validation (mandatory)
+
+- Use only Podman for local image validation in this repository.
+- After changing image code, Dockerfiles, scripts, or workflows, run local tests before finishing work.
+- Preferred command: `make local-test` (or `make local-test IMAGE=<image_name>` for targeted checks).
+- Treat local test failures as blocking and fix them before finalizing changes.
+
 ## Commit style
 
 - Make small, logical commits.
