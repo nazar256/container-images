@@ -15,6 +15,9 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/_reusable-build-and-push.yml
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     with:
       image_name: example
       context: images/example
