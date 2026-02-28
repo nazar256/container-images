@@ -2,11 +2,11 @@
 
 Telegram bot for voice-note transcription using Groq STT, with allowlist access control.
 
-Upstream source (fetched at build time and adapted with a local patch):
+Upstream source (vendored and adapted in this repository):
 
 - <https://github.com/aviaryan/voice-transcribe-summarize-telegram-bot>
 
-The Docker build downloads `bot.py` from a pinned upstream commit and applies `bot.patch` from this repository.
+`bot.py` is committed in this repository to keep builds deterministic and independent from upstream changes.
 
 ## Runtime environment
 

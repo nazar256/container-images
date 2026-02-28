@@ -1,17 +1,17 @@
 # Upstream source mapping
 
-This image does not commit upstream application code directly.
+This image vendors and adapts code from upstream.
 
-Build-time source:
+Source baseline:
 
 - Repository: https://github.com/aviaryan/voice-transcribe-summarize-telegram-bot
-- File downloaded during build: `bot.py`
-- Pinned commit in `Dockerfile`: `27e47aad6cba61482e10b40a9f5c23be23bf86bc`
+- File: `bot.py`
+- Branch used: `master`
 
 Local repository adaptation:
 
-- `images/telegram-transcribe-bot/bot.patch` is applied during image build.
-- Main behavior changes provided by the patch:
+- `images/telegram-transcribe-bot/bot.py` is committed in this repository.
+- Main behavior changes in the vendored file:
   - allowlist from `AUTHORIZED_USERS` environment variable
   - optional summary flow via `ENABLE_SUMMARY` (default `false`)
   - STT model from `GROQ_STT_MODEL` (default `whisper-large-v3-turbo`)
