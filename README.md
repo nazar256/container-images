@@ -23,6 +23,13 @@ Run locally:
 docker run --rm my-image:local
 ```
 
+Example image in this repository:
+
+```bash
+docker build -t example:local -f images/example/Dockerfile images/example
+docker run --rm example:local
+```
+
 ## CI and publishing
 
 - Trigger: `push` to `master`.
@@ -42,4 +49,5 @@ See details in `docs/workflows.md` and `docs/registry-ghcr.md`.
 <!-- IMAGES-LIST:START -->
 | Image | Path | Build locally | Pull from GHCR | Run |
 | --- | --- | --- | --- | --- |
+| `example` | `images/example` | `docker build -t example:local -f images/example/Dockerfile images/example` | `docker pull ghcr.io/<owner>/<repo>-example:latest` | `docker run --rm ghcr.io/<owner>/<repo>-example:latest` |
 <!-- IMAGES-LIST:END -->
