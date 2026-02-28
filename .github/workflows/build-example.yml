@@ -1,0 +1,21 @@
+name: build example
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - images/example/**
+      - .github/workflows/build-example.yml
+      - .github/workflows/_reusable-build-and-push.yml
+
+jobs:
+  build:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_reusable-build-and-push.yml
+    with:
+      image_name: example
+      context: images/example
+      dockerfile: images/example/Dockerfile
