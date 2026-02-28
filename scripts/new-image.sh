@@ -55,6 +55,12 @@ docker run --rm $image_name:local
 \`\`\`bash
 docker pull ghcr.io/<owner>/<repo>-$image_name:latest
 \`\`\`
+
+## Pull from Docker Hub
+
+\`\`\`bash
+docker pull <dockerhub-username>/<repo>-$image_name:latest
+\`\`\`
 EOF
 
 cat > "$workflow_file" <<EOF
@@ -75,6 +81,9 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/_reusable-build-and-push.yml
+    secrets:
+      DOCKERHUB_USERNAME: \${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: \${{ secrets.DOCKERHUB_TOKEN }}
     with:
       image_name: $image_name
       context: images/$image_name
@@ -86,7 +95,7 @@ if [ ! -f "$readme_file" ]; then
   exit 0
 fi
 
-row="| \`$image_name\` | \`images/$image_name\` | \`docker build -t $image_name:local -f images/$image_name/Dockerfile images/$image_name\` | \`docker pull ghcr.io/<owner>/<repo>-$image_name:latest\` | \`docker run --rm ghcr.io/<owner>/<repo>-$image_name:latest\` |"
+row="| \`$image_name\` | \`images/$image_name\` | \`docker build -t $image_name:local -f images/$image_name/Dockerfile images/$image_name\` | \`docker pull ghcr.io/<owner>/<repo>-$image_name:latest\` | \`docker pull <dockerhub-username>/<repo>-$image_name:latest\` | \`docker run --rm ghcr.io/<owner>/<repo>-$image_name:latest\` |"
 
 if grep -Fq "$row" "$readme_file"; then
   echo "Scaffolded $image_name"

@@ -43,3 +43,14 @@ Option 2 (PAT with `read:packages`):
 ```bash
 echo "<pat>" | docker login ghcr.io -u <github-username> --password-stdin
 ```
+
+## Optional Docker Hub mirror
+
+This repository can also push the same image tags to Docker Hub.
+
+Configure repository secrets:
+
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
+
+When these secrets are absent, workflows publish only to GHCR.

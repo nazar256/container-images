@@ -20,8 +20,20 @@ docker run --rm example:local
 docker pull ghcr.io/<owner>/<repo>-example:latest
 ```
 
+## Pull from Docker Hub
+
+```bash
+docker pull <dockerhub-username>/<repo>-example:latest
+```
+
 ## Run from GHCR
 
 ```bash
 docker run --rm ghcr.io/<owner>/<repo>-example:latest
+```
+
+## Run from Docker Hub
+
+```bash
+docker run --rm <dockerhub-username>/<repo>-example:latest
 ```

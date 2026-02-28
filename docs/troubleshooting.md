@@ -5,6 +5,12 @@
 - Confirm workflow job has `permissions: packages: write`.
 - Confirm package/repository permissions are not restricted.
 
+## Docker Hub login fails in workflow
+
+- Verify `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are present in repository secrets.
+- Ensure the token is a Docker Hub access token (not account password).
+- Recreate token if it was revoked.
+
 ## Authentication fails locally
 
 - Re-run `docker login ghcr.io` with a valid token.
@@ -14,6 +20,11 @@
 
 - Check `docker/metadata-action` tag rules in reusable workflow.
 - Confirm branch is `master` for `latest` tag behavior.
+
+## Docker Hub images are not pushed
+
+- Docker Hub push is conditional. If secrets are missing, workflow will publish only to GHCR.
+- Confirm expected target naming: `<dockerhub-username>/<repo>-<image_name>`.
 
 ## Multi-arch build errors
 
