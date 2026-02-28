@@ -12,7 +12,7 @@ Rules for automation agents working in this repository.
 
 - Prefer `./scripts/new-image.sh <image_name>` for new image scaffolding.
 - If adding files manually, mirror the same generated structure and naming.
-- Do not introduce nested GHCR names; keep image names as `<repo>-<image_name>`.
+- Keep GHCR image names as `<image_name>` under owner namespace (`ghcr.io/<owner>/<image_name>`).
 
 ## CI safety rules
 

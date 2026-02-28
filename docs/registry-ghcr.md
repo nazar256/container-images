@@ -6,17 +6,17 @@ GitHub Container Registry (GHCR) stores OCI-compatible container images under `g
 
 Images are published as:
 
-`ghcr.io/<owner>/<repo>-<image_name>`
+`ghcr.io/<owner>/<image_name>`
 
 Example:
 
-`ghcr.io/ynazarenko/container-images-example`
+`ghcr.io/ynazarenko/example`
 
 ## Where to find packages in GitHub UI
 
 1. Open your repository on GitHub.
 2. In the right sidebar, open **Packages**.
-3. Click the package name (for example, `container-images-example`).
+3. Click the package name (for example, `example`).
 
 You can also open the owner-level packages page:
 

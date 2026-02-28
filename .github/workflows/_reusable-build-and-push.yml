@@ -28,7 +28,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE: ${{ github.repository_owner }}/${{ github.event.repository.name }}-${{ inputs.image_name }}
+  IMAGE: ${{ github.repository_owner }}/${{ inputs.image_name }}
   DOCKERHUB_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}-${{ inputs.image_name }}
   DOCKERHUB_ENABLED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
 
