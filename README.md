@@ -58,4 +58,5 @@ See details in `docs/workflows.md` and `docs/registry-ghcr.md`.
 | Image | Path | Build locally | Pull from GHCR | Pull from Docker Hub | Run |
 | --- | --- | --- | --- | --- | --- |
 | `example` | `images/example` | `docker build -t example:local -f images/example/Dockerfile images/example` | `docker pull ghcr.io/<owner>/<repo>-example:latest` | `docker pull <dockerhub-username>/<repo>-example:latest` | `docker run --rm ghcr.io/<owner>/<repo>-example:latest` |
+| `telegram-transcribe-bot` | `images/telegram-transcribe-bot` | `docker build -t telegram-transcribe-bot:local -f images/telegram-transcribe-bot/Dockerfile images/telegram-transcribe-bot` | `docker pull ghcr.io/<owner>/<repo>-telegram-transcribe-bot:latest` | `docker pull <dockerhub-username>/<repo>-telegram-transcribe-bot:latest` | `docker run --rm ghcr.io/<owner>/<repo>-telegram-transcribe-bot:latest` |
 <!-- IMAGES-LIST:END -->

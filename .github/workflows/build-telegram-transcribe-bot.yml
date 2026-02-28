@@ -1,0 +1,24 @@
+name: build telegram-transcribe-bot
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - images/telegram-transcribe-bot/**
+      - .github/workflows/build-telegram-transcribe-bot.yml
+      - .github/workflows/_reusable-build-and-push.yml
+
+jobs:
+  build:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_reusable-build-and-push.yml
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    with:
+      image_name: telegram-transcribe-bot
+      context: images/telegram-transcribe-bot
+      dockerfile: images/telegram-transcribe-bot/Dockerfile
