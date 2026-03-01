@@ -11,7 +11,7 @@ ENV HOME=/home/node \
 
 WORKDIR /home/node
 
-RUN apk add --no-cache ca-certificates \
+RUN apk add --no-cache ca-certificates curl \
     && npm install -g --no-audit --no-fund @grinev/opencode-telegram-bot@${BOT_VERSION} \
     && opencode-telegram --help >/dev/null \
     && mkdir -p /home/node/.config/opencode-telegram-bot \
