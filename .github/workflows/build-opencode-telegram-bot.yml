@@ -1,0 +1,54 @@
+name: build opencode-telegram-bot
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - images/opencode-telegram-bot/**
+      - .github/workflows/build-opencode-telegram-bot.yml
+      - .github/workflows/_reusable-build-and-push.yml
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    outputs:
+      bot_version: ${{ steps.resolve_bot_version.outputs.bot_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve BOT_VERSION
+        id: resolve_bot_version
+        run: |
+          bot_version="0.9.2"
+          echo "bot_version=${bot_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build smoke image
+        run: |
+          docker build \
+            -t local/opencode-telegram-bot:smoke \
+            --build-arg BOT_VERSION=${{ steps.resolve_bot_version.outputs.bot_version }} \
+            -f images/opencode-telegram-bot/Dockerfile \
+            images/opencode-telegram-bot
+
+      - name: Smoke check CLI and config dir
+        run: |
+          docker run --rm --entrypoint opencode-telegram local/opencode-telegram-bot:smoke --help >/dev/null
+          docker run --rm --entrypoint sh local/opencode-telegram-bot:smoke -ceu 'test -d /home/node/.config/opencode-telegram-bot'
+
+  build:
+    needs: smoke
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_reusable-build-and-push.yml
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    with:
+      image_name: opencode-telegram-bot
+      context: images/opencode-telegram-bot
+      dockerfile: images/opencode-telegram-bot/Dockerfile
+      build_args: |
+        BOT_VERSION=${{ needs.smoke.outputs.bot_version }}

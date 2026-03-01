@@ -20,6 +20,11 @@ on:
         required: false
         default: linux/amd64,linux/arm64
         type: string
+      build_args:
+        description: Optional Docker build arguments (newline-separated key=value)
+        required: false
+        default: ''
+        type: string
     secrets:
       DOCKERHUB_USERNAME:
         required: false
@@ -94,6 +99,7 @@ jobs:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
           platforms: ${{ inputs.platforms }}
+          build-args: ${{ inputs.build_args }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max

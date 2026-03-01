@@ -41,13 +41,22 @@ local-smoke: podman-check
 
 smoke-image: podman-check
 	@echo ">>> smoke test $(IMAGE)"
-	@podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'if [ -f /app/bot.py ]; then python -m py_compile /app/bot.py; fi'
-	@podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu '\
-		mkdir -p /tmp/secrets; \
-		echo "dummy-telegram-token" > /tmp/secrets/telegram_bot_token; \
-		echo "dummy-groq-key" > /tmp/secrets/groq_api_key; \
-		TELEGRAM_BOT_TOKEN_FILE=/tmp/secrets/telegram_bot_token \
-		GROQ_API_KEY_FILE=/tmp/secrets/groq_api_key \
-		/app/entrypoint.sh sh -ceu "printenv TELEGRAM_BOT_TOKEN >/dev/null && printenv GROQ_API_KEY >/dev/null"'
+	@if [ "$(IMAGE)" = "telegram-transcribe-bot" ]; then \
+		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'python -m py_compile /app/bot.py'; \
+		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'TELEGRAM_BOT_TOKEN=dummy-telegram-token GROQ_API_KEY=dummy-groq-key AUTHORIZED_USERS=12345 ENABLE_SUMMARY=false python -c "import bot; bot.build_application()"'; \
+		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu '\
+			mkdir -p /tmp/secrets; \
+			echo "dummy-telegram-token" > /tmp/secrets/telegram_bot_token; \
+			echo "dummy-groq-key" > /tmp/secrets/groq_api_key; \
+			TELEGRAM_BOT_TOKEN_FILE=/tmp/secrets/telegram_bot_token \
+			GROQ_API_KEY_FILE=/tmp/secrets/groq_api_key \
+			/app/entrypoint.sh sh -ceu "printenv TELEGRAM_BOT_TOKEN >/dev/null && printenv GROQ_API_KEY >/dev/null"'; \
+	elif [ "$(IMAGE)" = "opencode-telegram-bot" ]; then \
+		podman run --rm --entrypoint opencode-telegram $(LOCAL_TAG_PREFIX)$(IMAGE):test --help >/dev/null; \
+		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -d /home/node/.config/opencode-telegram-bot'; \
+	else \
+		echo "No smoke test configured for $(IMAGE)" >&2; \
+		exit 1; \
+	fi
 
 local-test: local-build local-smoke
