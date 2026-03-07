@@ -10,7 +10,7 @@ ENV HOME=/config \
     OPENCLAW_GATEWAY_PORT=3443 \
     CDP_PORT=9222 \
     CHROMIUM_USER_DATA_DIR=/config/chromium/profile \
-    CHROME_CLI=--remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=/config/chromium/profile
+    CHROME_CLI="--remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=/config/chromium/profile"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl jq nodejs npm \
