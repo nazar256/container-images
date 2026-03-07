@@ -1,0 +1,18 @@
+#!/usr/bin/with-contenv bash
+set -euo pipefail
+
+runtime_user="${OPENCLAW_RUNTIME_USER:-abc}"
+
+if [ -n "${OPENCLAW_GATEWAY_TOKEN_FILE:-}" ] && [ -f "${OPENCLAW_GATEWAY_TOKEN_FILE}" ]; then
+  export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\r\n' < "${OPENCLAW_GATEWAY_TOKEN_FILE}")"
+fi
+
+if [ -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
+  echo "OPENCLAW_GATEWAY_TOKEN or OPENCLAW_GATEWAY_TOKEN_FILE is required" >&2
+  exit 1
+fi
+
+exec s6-setuidgid "${runtime_user}" \
+  openclaw node run \
+    --host "${OPENCLAW_GATEWAY_HOST}" \
+    --port "${OPENCLAW_GATEWAY_PORT}"
