@@ -1,5 +1,5 @@
-ARG BASE_IMAGE=docker.io/linuxserver/chromium:latest
-FROM ${BASE_IMAGE}
+ARG CHROMIUM_VERSION=version-09bef544
+FROM docker.io/linuxserver/chromium:${CHROMIUM_VERSION}
 
 ARG OPENCLAW_VERSION=2026.3.2
 
