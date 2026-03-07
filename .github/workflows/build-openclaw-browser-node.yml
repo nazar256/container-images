@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       openclaw_version: ${{ steps.resolve.outputs.openclaw_version }}
-      base_image: ${{ steps.resolve.outputs.base_image }}
+      chromium_version: ${{ steps.resolve.outputs.chromium_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,16 +23,16 @@ jobs:
         id: resolve
         run: |
           openclaw_version="2026.3.2"
-          base_image="docker.io/linuxserver/chromium:latest"
+          chromium_version="version-09bef544"
           echo "openclaw_version=${openclaw_version}" >> "$GITHUB_OUTPUT"
-          echo "base_image=${base_image}" >> "$GITHUB_OUTPUT"
+          echo "chromium_version=${chromium_version}" >> "$GITHUB_OUTPUT"
 
       - name: Build smoke image
         run: |
           docker build \
             -t local/openclaw-browser-node:smoke \
             --build-arg OPENCLAW_VERSION=${{ steps.resolve.outputs.openclaw_version }} \
-            --build-arg BASE_IMAGE=${{ steps.resolve.outputs.base_image }} \
+            --build-arg CHROMIUM_VERSION=${{ steps.resolve.outputs.chromium_version }} \
             -f images/openclaw-browser-node/Dockerfile \
             images/openclaw-browser-node
 
@@ -57,4 +57,4 @@ jobs:
       dockerfile: images/openclaw-browser-node/Dockerfile
       build_args: |
         OPENCLAW_VERSION=${{ needs.smoke.outputs.openclaw_version }}
-        BASE_IMAGE=${{ needs.smoke.outputs.base_image }}
+        CHROMIUM_VERSION=${{ needs.smoke.outputs.chromium_version }}
