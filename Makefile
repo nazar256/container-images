@@ -54,6 +54,10 @@ smoke-image: podman-check
 	elif [ "$(IMAGE)" = "opencode-telegram-bot" ]; then \
 		podman run --rm --entrypoint opencode-telegram $(LOCAL_TAG_PREFIX)$(IMAGE):test --help >/dev/null; \
 		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -d /home/node/.config/opencode-telegram-bot'; \
+	elif [ "$(IMAGE)" = "openclaw-browser-node" ]; then \
+		podman run --rm --entrypoint openclaw $(LOCAL_TAG_PREFIX)$(IMAGE):test --version >/dev/null; \
+		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /custom-cont-init.d/40-openclaw-init'; \
+		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /custom-services.d/openclaw-node/run'; \
 	else \
 		echo "No smoke test configured for $(IMAGE)" >&2; \
 		exit 1; \
