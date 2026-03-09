@@ -11,9 +11,9 @@ if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
   mkdir -p "$(dirname "${OPENCLAW_CONFIG_PATH}")"
   cat > "${OPENCLAW_CONFIG_PATH}" <<JSON
 {
-  nodeHost: {
-    browserProxy: {
-      enabled: true
+  "nodeHost": {
+    "browserProxy": {
+      "enabled": true
     }
   }
 }
