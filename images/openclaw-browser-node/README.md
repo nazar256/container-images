@@ -4,7 +4,7 @@ Chromium + OpenClaw node host image built on top of LinuxServer Chromium.
 
 ## Design choices
 
-- Base image defaults to `docker.io/linuxserver/chromium:latest` and is overrideable via build arg `BASE_IMAGE`.
+- Base image defaults to `docker.io/linuxserver/chromium` and is pinned by build arg `CHROMIUM_VERSION` (default: `version-09bef544`).
 - OpenClaw CLI is installed from npm and pinned by build arg `OPENCLAW_VERSION` (default: `2026.3.2`).
 - Node connectivity defaults to `OPENCLAW_GATEWAY_HOST=openclaw-gateway` and `OPENCLAW_GATEWAY_PORT=3443`.
 - CDP is enabled for the interactive Chromium instance using `CHROME_CLI` with loopback binding and a persistent non-default user data dir.
@@ -14,7 +14,7 @@ Chromium + OpenClaw node host image built on top of LinuxServer Chromium.
 ```bash
 podman build \
   -t openclaw-browser-node:local \
-  --build-arg BASE_IMAGE=docker.io/linuxserver/chromium:latest \
+  --build-arg CHROMIUM_VERSION=version-09bef544 \
   --build-arg OPENCLAW_VERSION=2026.3.2 \
   -f images/openclaw-browser-node/Dockerfile \
   images/openclaw-browser-node
@@ -46,6 +46,8 @@ The LinuxServer Chromium web UI is available on `https://localhost:3001`.
 - `CHROMIUM_USER_DATA_DIR` (default: `/config/chromium/profile`)
 - `CHROME_CLI` (default includes loopback CDP and persistent user data dir)
 - `OPENCLAW_CONFIG_PATH` (default: `/config/.openclaw/openclaw.json`)
+- `OPENCLAW_RUNTIME_USER` (default: `abc`, runtime user name used inside the container)
+- `OPENCLAW_RUNTIME_GROUP` (default: `abc`, runtime group name used inside the container)
 
 ## Pull from GHCR
 
