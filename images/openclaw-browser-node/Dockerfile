@@ -13,7 +13,7 @@ ENV HOME=/config \
     CHROME_CLI="--remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=/config/chromium/profile"
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl jq nodejs npm \
+    && apt-get install -y --no-install-recommends ca-certificates curl nodejs npm \
     && npm config set strict-ssl false \
     && npm install --global --omit=dev "openclaw@${OPENCLAW_VERSION}" \
     && npm cache clean --force \
