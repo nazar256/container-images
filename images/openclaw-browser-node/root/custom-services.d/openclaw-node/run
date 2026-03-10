@@ -7,12 +7,7 @@ if [ -n "${OPENCLAW_GATEWAY_TOKEN_FILE:-}" ] && [ -f "${OPENCLAW_GATEWAY_TOKEN_F
   export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\r\n' < "${OPENCLAW_GATEWAY_TOKEN_FILE}")"
 fi
 
-if [ -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
-  echo "OPENCLAW_GATEWAY_TOKEN or OPENCLAW_GATEWAY_TOKEN_FILE is required; sleeping 30s before exit to avoid restart flood" >&2
-  sleep 30
-  exit 1
-fi
-
+# OPENCLAW_GATEWAY_TOKEN is optional; if absent the node runs unauthenticated
 exec s6-setuidgid "${runtime_user}" \
   openclaw node run \
     --host "${OPENCLAW_GATEWAY_HOST}" \
