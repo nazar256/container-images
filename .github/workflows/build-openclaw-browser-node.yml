@@ -1,0 +1,60 @@
+name: build openclaw-browser-node
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - images/openclaw-browser-node/**
+      - .github/workflows/build-openclaw-browser-node.yml
+      - .github/workflows/_reusable-build-and-push.yml
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    outputs:
+      openclaw_version: ${{ steps.resolve.outputs.openclaw_version }}
+      chromium_version: ${{ steps.resolve.outputs.chromium_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve build args
+        id: resolve
+        run: |
+          openclaw_version="2026.3.2"
+          chromium_version="version-09bef544"
+          echo "openclaw_version=${openclaw_version}" >> "$GITHUB_OUTPUT"
+          echo "chromium_version=${chromium_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build smoke image
+        run: |
+          docker build \
+            -t local/openclaw-browser-node:smoke \
+            --build-arg OPENCLAW_VERSION=${{ steps.resolve.outputs.openclaw_version }} \
+            --build-arg CHROMIUM_VERSION=${{ steps.resolve.outputs.chromium_version }} \
+            -f images/openclaw-browser-node/Dockerfile \
+            images/openclaw-browser-node
+
+      - name: Smoke check OpenClaw install and service assets
+        run: |
+          docker run --rm --entrypoint openclaw local/openclaw-browser-node:smoke --version >/dev/null
+          docker run --rm --entrypoint sh local/openclaw-browser-node:smoke -ceu 'test -x /custom-cont-init.d/40-openclaw-init'
+          docker run --rm --entrypoint sh local/openclaw-browser-node:smoke -ceu 'test -x /custom-services.d/openclaw-node/run'
+
+  build:
+    needs: smoke
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_reusable-build-and-push.yml
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    with:
+      image_name: openclaw-browser-node
+      context: images/openclaw-browser-node
+      dockerfile: images/openclaw-browser-node/Dockerfile
+      build_args: |
+        OPENCLAW_VERSION=${{ needs.smoke.outputs.openclaw_version }}
+        CHROMIUM_VERSION=${{ needs.smoke.outputs.chromium_version }}

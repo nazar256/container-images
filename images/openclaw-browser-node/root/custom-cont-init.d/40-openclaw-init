@@ -1,0 +1,22 @@
+#!/usr/bin/with-contenv bash
+set -euo pipefail
+
+runtime_user="${OPENCLAW_RUNTIME_USER:-abc}"
+runtime_group="${OPENCLAW_RUNTIME_GROUP:-abc}"
+
+mkdir -p "${OPENCLAW_HOME}" "${CHROMIUM_USER_DATA_DIR}"
+chown -R "${runtime_user}:${runtime_group}" "${OPENCLAW_HOME}" "${CHROMIUM_USER_DATA_DIR}"
+
+if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
+  mkdir -p "$(dirname "${OPENCLAW_CONFIG_PATH}")"
+  cat > "${OPENCLAW_CONFIG_PATH}" <<JSON
+{
+  "nodeHost": {
+    "browserProxy": {
+      "enabled": true
+    }
+  }
+}
+JSON
+  chown "${runtime_user}:${runtime_group}" "${OPENCLAW_CONFIG_PATH}"
+fi
