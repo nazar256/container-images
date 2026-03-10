@@ -1,5 +1,5 @@
-ARG BASE_IMAGE=docker.io/linuxserver/chromium:latest
-FROM ${BASE_IMAGE}
+ARG CHROMIUM_VERSION=version-09bef544
+FROM docker.io/linuxserver/chromium:${CHROMIUM_VERSION}
 
 ARG OPENCLAW_VERSION=2026.3.2
 
@@ -14,7 +14,6 @@ ENV HOME=/config \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl nodejs npm \
-    && npm config set strict-ssl false \
     && npm install --global --omit=dev "openclaw@${OPENCLAW_VERSION}" \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
