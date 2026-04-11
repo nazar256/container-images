@@ -4,7 +4,6 @@ FROM docker.io/library/node:${NODE_VERSION}-bookworm-slim AS node
 
 FROM docker.io/linuxserver/chromium:${CHROMIUM_VERSION}
 
-ARG NODE_VERSION=22.14.0
 ARG OPENCLAW_VERSION=2026.4.9
 
 ENV HOME=/config \
