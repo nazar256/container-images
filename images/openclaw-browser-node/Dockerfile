@@ -1,7 +1,7 @@
 ARG NODE_VERSION=22.14.0
+ARG CHROMIUM_VERSION=version-09bef544
 FROM docker.io/library/node:${NODE_VERSION}-bookworm-slim AS node
 
-ARG CHROMIUM_VERSION=version-09bef544
 FROM docker.io/linuxserver/chromium:${CHROMIUM_VERSION}
 
 ARG NODE_VERSION=22.14.0
