@@ -1,5 +1,5 @@
 import express from 'express';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import process from 'node:process';
 
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -30,7 +30,7 @@ app.use((req, res, next) => {
   }
 
   const authorization = req.header('authorization') ?? '';
-  if (authorization === `Bearer ${bearerToken}`) {
+  if (safeEquals(authorization, `Bearer ${bearerToken}`)) {
     return next();
   }
 
@@ -218,6 +218,17 @@ function isTrue(value) {
 
 function normalizePath(value) {
   return value.startsWith('/') ? value : `/${value}`;
+}
+
+function safeEquals(left, right) {
+  const leftBuffer = Buffer.from(left, 'utf8');
+  const rightBuffer = Buffer.from(right, 'utf8');
+
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function log(message) {
