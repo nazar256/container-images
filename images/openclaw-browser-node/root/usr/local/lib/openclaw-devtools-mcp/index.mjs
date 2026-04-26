@@ -14,6 +14,7 @@ const bearerToken = process.env.OPENCLAW_DEVTOOLS_MCP_AUTH_BEARER_TOKEN ?? '';
 const disablePerformanceCrux = isTrue(process.env.OPENCLAW_DEVTOOLS_MCP_DISABLE_PERFORMANCE_CRUX ?? 'true');
 const maxSessions = parseIntegerEnv('OPENCLAW_DEVTOOLS_MCP_MAX_SESSIONS', 16, { min: 1 });
 const sessionTimeoutMs = parseIntegerEnv('OPENCLAW_DEVTOOLS_MCP_SESSION_TIMEOUT_MS', 300000, { min: 0 });
+const sessionTimeoutEnabled = sessionTimeoutMs > 0;
 
 if (!Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535) {
   throw new Error(`OPENCLAW_DEVTOOLS_MCP_PORT must be a valid TCP port, got: ${process.env.OPENCLAW_DEVTOOLS_MCP_PORT ?? ''}`);
@@ -151,7 +152,7 @@ async function createSession() {
   }
 
   reservedSessionSlots += 1;
-  let stdioTransport;
+  let stdioTransport = null;
 
   try {
     stdioTransport = new StdioClientTransport({
@@ -238,7 +239,7 @@ function requireSession(req, res) {
 }
 
 function touchSession(session) {
-  if (session.cleanedUp || sessionTimeoutMs === 0) {
+  if (session.cleanedUp || !sessionTimeoutEnabled) {
     return;
   }
 
@@ -255,6 +256,7 @@ function touchSession(session) {
     );
   }, sessionTimeoutMs);
 
+  // Do not keep the Node process alive solely because an inactivity timer is pending.
   session.inactivityTimer.unref();
 }
 
