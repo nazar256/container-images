@@ -147,11 +147,7 @@ function bindSessionResponseLifecycle(session) {
 }
 
 async function createSession() {
-  if (reservedSessionSlots >= maxSessions) {
-    throw new Error(`session limit reached (${maxSessions})`);
-  }
-
-  reservedSessionSlots += 1;
+  reserveSessionSlot();
   let stdioTransport = null;
 
   try {
@@ -250,6 +246,10 @@ function touchSession(session) {
   }
 
   session.inactivityTimer = setTimeout(() => {
+    if (session.cleanedUp) {
+      return;
+    }
+
     void cleanupSession(
       session,
       `inactive for ${sessionTimeoutMs}ms since ${new Date(session.lastActivityAt).toISOString()}`,
@@ -296,6 +296,14 @@ function safeEquals(left, right) {
   }
 
   return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function reserveSessionSlot() {
+  if (reservedSessionSlots >= maxSessions) {
+    throw new Error(`session limit reached (${maxSessions})`);
+  }
+
+  reservedSessionSlots += 1;
 }
 
 function parseIntegerEnv(name, fallback, { min }) {
