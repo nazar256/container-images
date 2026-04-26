@@ -22,6 +22,7 @@ if (!Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535) {
 const app = express();
 const sessions = new Map();
 let pendingSessions = 0;
+let sessionReservation = Promise.resolve();
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '10mb' }));
@@ -66,7 +67,7 @@ app.post(endpointPath, async (req, res) => {
       }
     }
 
-    touchSession(session, 'POST request');
+    touchSession(session);
     return await session.httpTransport.handleRequest(req, res, req.body);
   } catch (error) {
     console.error('[openclaw-devtools-mcp] failed handling POST request', error);
@@ -131,14 +132,14 @@ function bindSessionResponseLifecycle(session) {
   });
 
   session.stdioTransport.onmessage = (message) => {
-    touchSession(session, 'stdio response');
+    touchSession(session);
     void session.httpTransport.send(message).catch((error) => {
       console.error('[openclaw-devtools-mcp] failed sending MCP response', error);
     });
   };
 
   session.httpTransport.onmessage = (message) => {
-    touchSession(session, 'http request');
+    touchSession(session);
     void session.stdioTransport.send(message).catch((error) => {
       console.error('[openclaw-devtools-mcp] failed forwarding MCP request', error);
     });
@@ -146,48 +147,58 @@ function bindSessionResponseLifecycle(session) {
 }
 
 async function createSession() {
-  if (sessions.size + pendingSessions >= maxSessions) {
-    throw new Error(`session limit reached (${maxSessions})`);
+  await reserveSessionSlot();
+
+  let reservationActive = true;
+  let stdioTransport;
+
+  try {
+    stdioTransport = new StdioClientTransport({
+      command: 'chrome-devtools-mcp',
+      args: buildChromeDevToolsArgs(),
+      env: process.env,
+      stderr: 'pipe',
+    });
+
+    await stdioTransport.start();
+
+    const session = {
+      cleanedUp: false,
+      httpTransport: null,
+      inactivityTimer: null,
+      lastActivityAt: Date.now(),
+      pending: true,
+      sessionId: null,
+      stdioTransport,
+    };
+
+    const httpTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (sessionId) => {
+        if (session.pending) {
+          session.pending = false;
+          pendingSessions -= 1;
+          reservationActive = false;
+        }
+
+        session.sessionId = sessionId;
+        sessions.set(sessionId, session);
+        log(`created session ${sessionId}`);
+      },
+    });
+
+    session.httpTransport = httpTransport;
+    bindSessionResponseLifecycle(session);
+    touchSession(session);
+    return session;
+  } catch (error) {
+    if (reservationActive) {
+      pendingSessions -= 1;
+    }
+
+    await stdioTransport?.close().catch(() => {});
+    throw error;
   }
-
-  pendingSessions += 1;
-
-  const stdioTransport = new StdioClientTransport({
-    command: 'chrome-devtools-mcp',
-    args: buildChromeDevToolsArgs(),
-    env: process.env,
-    stderr: 'pipe',
-  });
-
-  await stdioTransport.start();
-
-  const session = {
-    cleanedUp: false,
-    httpTransport: null,
-    inactivityTimer: null,
-    pending: true,
-    sessionId: null,
-    stdioTransport,
-  };
-
-  const httpTransport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
-    onsessioninitialized: (sessionId) => {
-      if (session.pending) {
-        session.pending = false;
-        pendingSessions -= 1;
-      }
-
-      session.sessionId = sessionId;
-      sessions.set(sessionId, session);
-      log(`created session ${sessionId}`);
-    },
-  });
-
-  session.httpTransport = httpTransport;
-  bindSessionResponseLifecycle(session);
-  touchSession(session, 'session created');
-  return session;
 }
 
 async function cleanupSession(session, reason) {
@@ -225,7 +236,7 @@ function requireSession(req, res) {
   const session = sessionId ? sessions.get(sessionId) : undefined;
 
   if (session) {
-    touchSession(session, `${req.method} request`);
+    touchSession(session);
     return session;
   }
 
@@ -233,17 +244,22 @@ function requireSession(req, res) {
   return null;
 }
 
-function touchSession(session, reason) {
+function touchSession(session) {
   if (session.cleanedUp || sessionTimeoutMs === 0) {
     return;
   }
+
+  session.lastActivityAt = Date.now();
 
   if (session.inactivityTimer) {
     clearTimeout(session.inactivityTimer);
   }
 
   session.inactivityTimer = setTimeout(() => {
-    void cleanupSession(session, `inactive for ${sessionTimeoutMs}ms after ${reason}`);
+    void cleanupSession(
+      session,
+      `inactive for ${sessionTimeoutMs}ms since ${new Date(session.lastActivityAt).toISOString()}`,
+    );
   }, sessionTimeoutMs);
 
   session.inactivityTimer.unref?.();
@@ -285,6 +301,26 @@ function safeEquals(left, right) {
   }
 
   return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+async function reserveSessionSlot() {
+  let releaseReservation;
+  const previousReservation = sessionReservation;
+  sessionReservation = new Promise((resolve) => {
+    releaseReservation = resolve;
+  });
+
+  await previousReservation;
+
+  try {
+    if (sessions.size + pendingSessions >= maxSessions) {
+      throw new Error(`session limit reached (${maxSessions})`);
+    }
+
+    pendingSessions += 1;
+  } finally {
+    releaseReservation();
+  }
 }
 
 function parseIntegerEnv(name, fallback, { min }) {
