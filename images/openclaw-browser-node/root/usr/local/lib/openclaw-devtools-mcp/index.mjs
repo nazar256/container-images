@@ -22,7 +22,8 @@ if (!Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535) {
 const app = express();
 const sessions = new Map();
 let pendingSessions = 0;
-let sessionReservation = Promise.resolve();
+let reservationLocked = false;
+const reservationWaiters = [];
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '10mb' }));
@@ -262,7 +263,7 @@ function touchSession(session) {
     );
   }, sessionTimeoutMs);
 
-  session.inactivityTimer.unref?.();
+  session.inactivityTimer.unref();
 }
 
 function getSessionId(req) {
@@ -304,13 +305,7 @@ function safeEquals(left, right) {
 }
 
 async function reserveSessionSlot() {
-  let releaseReservation;
-  const previousReservation = sessionReservation;
-  sessionReservation = new Promise((resolve) => {
-    releaseReservation = resolve;
-  });
-
-  await previousReservation;
+  await acquireReservationLock();
 
   try {
     if (sessions.size + pendingSessions >= maxSessions) {
@@ -319,8 +314,31 @@ async function reserveSessionSlot() {
 
     pendingSessions += 1;
   } finally {
-    releaseReservation();
+    releaseReservationLock();
   }
+}
+
+async function acquireReservationLock() {
+  if (!reservationLocked) {
+    reservationLocked = true;
+    return;
+  }
+
+  await new Promise((resolve) => {
+    reservationWaiters.push(resolve);
+  });
+
+  reservationLocked = true;
+}
+
+function releaseReservationLock() {
+  const nextWaiter = reservationWaiters.shift();
+  if (nextWaiter) {
+    nextWaiter();
+    return;
+  }
+
+  reservationLocked = false;
 }
 
 function parseIntegerEnv(name, fallback, { min }) {
