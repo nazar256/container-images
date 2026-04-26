@@ -43,8 +43,11 @@ jobs:
       - name: Smoke check OpenClaw install and service assets
         run: |
           docker run --rm --entrypoint openclaw local/openclaw-browser-node:smoke --version >/dev/null
+          docker run --rm --entrypoint chrome-devtools-mcp local/openclaw-browser-node:smoke --version >/dev/null
           docker run --rm --entrypoint sh local/openclaw-browser-node:smoke -ceu 'test -x /custom-cont-init.d/40-openclaw-init'
           docker run --rm --entrypoint sh local/openclaw-browser-node:smoke -ceu 'test -x /custom-services.d/openclaw-node/run'
+          docker run --rm --entrypoint sh local/openclaw-browser-node:smoke -ceu 'test -x /custom-services.d/openclaw-devtools-mcp/run'
+          docker run --rm --entrypoint sh local/openclaw-browser-node:smoke -ceu 'test -f /usr/local/lib/openclaw-devtools-mcp/index.mjs'
 
   build:
     needs: smoke

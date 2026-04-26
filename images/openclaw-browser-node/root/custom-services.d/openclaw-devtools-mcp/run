@@ -1,0 +1,35 @@
+#!/usr/bin/with-contenv bash
+set -euo pipefail
+
+runtime_user="${OPENCLAW_RUNTIME_USER:-abc}"
+browser_cdp_url="${OPENCLAW_BROWSER_CDP_URL:-http://127.0.0.1:${CDP_PORT:-9222}}"
+
+is_true() {
+  case "${1,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if ! is_true "${OPENCLAW_DEVTOOLS_MCP_ENABLED:-true}"; then
+  echo "[openclaw-devtools-mcp] disabled; keeping service idle"
+  exec s6-setuidgid "${runtime_user}" sleep infinity
+fi
+
+if is_true "${OPENCLAW_DEVTOOLS_MCP_DISABLE_USAGE_STATISTICS:-true}"; then
+  export CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS=1
+fi
+
+if is_true "${OPENCLAW_DEVTOOLS_MCP_DISABLE_UPDATE_CHECKS:-true}"; then
+  export CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS=1
+fi
+
+echo "[openclaw-devtools-mcp] waiting for browser CDP at ${browser_cdp_url}"
+until curl --silent --show-error --fail --max-time 2 "${browser_cdp_url}/json/version" >/dev/null; do
+  echo "[openclaw-devtools-mcp] browser CDP not ready yet; retrying in 2s"
+  sleep 2
+done
+
+echo "[openclaw-devtools-mcp] starting Streamable HTTP MCP endpoint on ${OPENCLAW_DEVTOOLS_MCP_HOST:-0.0.0.0}:${OPENCLAW_DEVTOOLS_MCP_PORT:-9223}${OPENCLAW_DEVTOOLS_MCP_PATH:-/mcp}"
+exec s6-setuidgid "${runtime_user}" \
+  node /usr/local/lib/openclaw-devtools-mcp/index.mjs

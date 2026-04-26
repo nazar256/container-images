@@ -4,8 +4,28 @@ set -euo pipefail
 runtime_user="${OPENCLAW_RUNTIME_USER:-abc}"
 runtime_group="${OPENCLAW_RUNTIME_GROUP:-abc}"
 
+persist_env() {
+  local name="$1"
+  local value="$2"
+
+  for env_dir in /run/s6/container_environment /var/run/s6/container_environment; do
+    if [ -d "${env_dir}" ]; then
+      printf '%s' "${value}" > "${env_dir}/${name}"
+    fi
+  done
+
+  export "${name}=${value}"
+}
+
 mkdir -p "${OPENCLAW_HOME}" "${CHROMIUM_USER_DATA_DIR}"
 chown -R "${runtime_user}:${runtime_group}" "${OPENCLAW_HOME}" "${CHROMIUM_USER_DATA_DIR}"
+
+if [ -z "${CHROME_CLI:-}" ]; then
+  CHROME_CLI="--remote-debugging-address=127.0.0.1 --remote-debugging-port=${CDP_PORT} --user-data-dir=${CHROMIUM_USER_DATA_DIR}"
+fi
+
+persist_env CHROME_CLI "${CHROME_CLI}"
+persist_env OPENCLAW_BROWSER_CDP_URL "http://127.0.0.1:${CDP_PORT}"
 
 if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
   mkdir -p "$(dirname "${OPENCLAW_CONFIG_PATH}")"
