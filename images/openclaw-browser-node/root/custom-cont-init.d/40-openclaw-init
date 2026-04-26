@@ -14,7 +14,8 @@ persist_env() {
     fi
   done
 
-  export "${name}=${value}"
+  printf -v "${name}" '%s' "${value}"
+  export "${name}"
 }
 
 mkdir -p "${OPENCLAW_HOME}" "${CHROMIUM_USER_DATA_DIR}"
