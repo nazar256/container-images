@@ -165,6 +165,7 @@ async function createSession() {
     cleanedUp: false,
     httpTransport: null,
     inactivityTimer: null,
+    pending: true,
     sessionId: null,
     stdioTransport,
   };
@@ -184,7 +185,6 @@ async function createSession() {
   });
 
   session.httpTransport = httpTransport;
-  session.pending = true;
   bindSessionResponseLifecycle(session);
   touchSession(session, 'session created');
   return session;
@@ -199,7 +199,7 @@ async function cleanupSession(session, reason) {
   session.cleanedUp = true;
   if (session.pending) {
     session.pending = false;
-    pendingSessions = Math.max(0, pendingSessions - 1);
+    pendingSessions -= 1;
   }
 
   if (session.inactivityTimer) {
