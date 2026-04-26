@@ -148,6 +148,7 @@ function bindSessionResponseLifecycle(session) {
 
 async function createSession() {
   reserveSessionSlot();
+  let slotReserved = true;
   let stdioTransport = null;
 
   try {
@@ -184,7 +185,10 @@ async function createSession() {
     touchSession(session);
     return session;
   } catch (error) {
-    reservedSessionSlots -= 1;
+    if (slotReserved) {
+      reservedSessionSlots -= 1;
+      slotReserved = false;
+    }
 
     await stdioTransport?.close().catch(() => {});
     throw error;
@@ -240,6 +244,7 @@ function touchSession(session) {
   }
 
   session.lastActivityAt = Date.now();
+  const inactivityStartTime = session.lastActivityAt;
 
   if (session.inactivityTimer) {
     clearTimeout(session.inactivityTimer);
@@ -252,7 +257,7 @@ function touchSession(session) {
 
     void cleanupSession(
       session,
-      `inactive for ${sessionTimeoutMs}ms since ${new Date(session.lastActivityAt).toISOString()}`,
+      `inactive for ${sessionTimeoutMs}ms since ${new Date(inactivityStartTime).toISOString()}`,
     );
   }, sessionTimeoutMs);
 
@@ -312,7 +317,9 @@ function parseIntegerEnv(name, fallback, { min }) {
   const parsed = usingFallback ? fallback : Number.parseInt(rawValue, 10);
 
   if (!Number.isInteger(parsed) || parsed < min) {
-    const sourceValue = usingFallback ? `fallback ${fallback}` : `value ${rawValue}`;
+    const sourceValue = usingFallback
+      ? `default fallback value ${fallback}`
+      : `environment value ${rawValue}`;
     throw new Error(`${name} must be an integer >= ${min}, got ${sourceValue}`);
   }
 
