@@ -3,17 +3,17 @@ import { randomUUID, timingSafeEqual } from 'node:crypto';
 import process from 'node:process';
 
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
-const bridgeVersion = '1.0.0';
 const browserUrl = process.env.OPENCLAW_BROWSER_CDP_URL ?? `http://127.0.0.1:${process.env.CDP_PORT ?? '9222'}`;
 const listenHost = process.env.OPENCLAW_DEVTOOLS_MCP_HOST ?? '0.0.0.0';
 const listenPort = Number.parseInt(process.env.OPENCLAW_DEVTOOLS_MCP_PORT ?? '9223', 10);
 const endpointPath = normalizePath(process.env.OPENCLAW_DEVTOOLS_MCP_PATH ?? '/mcp');
 const bearerToken = process.env.OPENCLAW_DEVTOOLS_MCP_AUTH_BEARER_TOKEN ?? '';
 const disablePerformanceCrux = isTrue(process.env.OPENCLAW_DEVTOOLS_MCP_DISABLE_PERFORMANCE_CRUX ?? 'true');
+const maxSessions = parseIntegerEnv('OPENCLAW_DEVTOOLS_MCP_MAX_SESSIONS', 16, { min: 1 });
+const sessionTimeoutMs = parseIntegerEnv('OPENCLAW_DEVTOOLS_MCP_SESSION_TIMEOUT_MS', 300000, { min: 0 });
 
 if (!Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535) {
   throw new Error(`OPENCLAW_DEVTOOLS_MCP_PORT must be a valid TCP port, got: ${process.env.OPENCLAW_DEVTOOLS_MCP_PORT ?? ''}`);
@@ -21,6 +21,7 @@ if (!Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535) {
 
 const app = express();
 const sessions = new Map();
+let pendingSessions = 0;
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '10mb' }));
@@ -45,48 +46,67 @@ app.use((req, res, next) => {
 });
 
 app.post(endpointPath, async (req, res) => {
-  const requestedSessionId = getSessionId(req);
-  let session = requestedSessionId ? sessions.get(requestedSessionId) : undefined;
+  try {
+    const requestedSessionId = getSessionId(req);
+    let session = requestedSessionId ? sessions.get(requestedSessionId) : undefined;
 
-  if (!session) {
-    if (requestedSessionId || !isInitializeRequest(req.body)) {
-      return res.status(400).json({
-        jsonrpc: '2.0',
-        error: {
-          code: -32000,
-          message: 'Bad Request: missing or invalid MCP session',
-        },
-        id: null,
-      });
+    if (!session) {
+      if (requestedSessionId || !isInitializeRequest(req.body)) {
+        return jsonRpcError(res, 400, -32000, 'Bad Request: missing or invalid MCP session');
+      }
+
+      try {
+        session = await createSession();
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('session limit reached')) {
+          return jsonRpcError(res, 429, -32002, error.message);
+        }
+
+        throw error;
+      }
     }
 
-    session = await createSession();
+    touchSession(session, 'POST request');
+    return await session.httpTransport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error('[openclaw-devtools-mcp] failed handling POST request', error);
+    return jsonRpcError(res, 500, -32603, 'Internal server error');
   }
-
-  return session.httpTransport.handleRequest(req, res, req.body);
 });
 
 app.get(endpointPath, async (req, res) => {
-  const session = requireSession(req, res);
-  if (!session) {
-    return;
-  }
+  try {
+    const session = requireSession(req, res);
+    if (!session) {
+      return;
+    }
 
-  return session.httpTransport.handleRequest(req, res);
+    return await session.httpTransport.handleRequest(req, res);
+  } catch (error) {
+    console.error('[openclaw-devtools-mcp] failed handling GET request', error);
+    return jsonRpcError(res, 500, -32603, 'Internal server error');
+  }
 });
 
 app.delete(endpointPath, async (req, res) => {
-  const session = requireSession(req, res);
-  if (!session) {
-    return;
-  }
+  try {
+    const session = requireSession(req, res);
+    if (!session) {
+      return;
+    }
 
-  return session.httpTransport.handleRequest(req, res);
+    return await session.httpTransport.handleRequest(req, res);
+  } catch (error) {
+    console.error('[openclaw-devtools-mcp] failed handling DELETE request', error);
+    return jsonRpcError(res, 500, -32603, 'Internal server error');
+  }
 });
 
 app.listen(listenPort, listenHost, () => {
   log(`listening on http://${listenHost}:${listenPort}${endpointPath}`);
   log(`proxying Chrome DevTools MCP to ${browserUrl}`);
+  log(`max sessions: ${maxSessions}`);
+  log(`session timeout: ${sessionTimeoutMs === 0 ? 'disabled' : `${sessionTimeoutMs}ms`}`);
 });
 
 function bindSessionResponseLifecycle(session) {
@@ -111,12 +131,14 @@ function bindSessionResponseLifecycle(session) {
   });
 
   session.stdioTransport.onmessage = (message) => {
+    touchSession(session, 'stdio response');
     void session.httpTransport.send(message).catch((error) => {
       console.error('[openclaw-devtools-mcp] failed sending MCP response', error);
     });
   };
 
   session.httpTransport.onmessage = (message) => {
+    touchSession(session, 'http request');
     void session.stdioTransport.send(message).catch((error) => {
       console.error('[openclaw-devtools-mcp] failed forwarding MCP request', error);
     });
@@ -124,10 +146,11 @@ function bindSessionResponseLifecycle(session) {
 }
 
 async function createSession() {
-  const sdkServer = new Server(
-    { name: 'openclaw-devtools-mcp', version: bridgeVersion },
-    { capabilities: {} },
-  );
+  if (sessions.size + pendingSessions >= maxSessions) {
+    throw new Error(`session limit reached (${maxSessions})`);
+  }
+
+  pendingSessions += 1;
 
   const stdioTransport = new StdioClientTransport({
     command: 'chrome-devtools-mcp',
@@ -139,8 +162,9 @@ async function createSession() {
   await stdioTransport.start();
 
   const session = {
+    cleanedUp: false,
     httpTransport: null,
-    sdkServer,
+    inactivityTimer: null,
     sessionId: null,
     stdioTransport,
   };
@@ -148,6 +172,11 @@ async function createSession() {
   const httpTransport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
     onsessioninitialized: (sessionId) => {
+      if (session.pending) {
+        session.pending = false;
+        pendingSessions -= 1;
+      }
+
       session.sessionId = sessionId;
       sessions.set(sessionId, session);
       log(`created session ${sessionId}`);
@@ -155,8 +184,9 @@ async function createSession() {
   });
 
   session.httpTransport = httpTransport;
-  await sdkServer.connect(httpTransport);
+  session.pending = true;
   bindSessionResponseLifecycle(session);
+  touchSession(session, 'session created');
   return session;
 }
 
@@ -167,6 +197,16 @@ async function cleanupSession(session, reason) {
   }
 
   session.cleanedUp = true;
+  if (session.pending) {
+    session.pending = false;
+    pendingSessions = Math.max(0, pendingSessions - 1);
+  }
+
+  if (session.inactivityTimer) {
+    clearTimeout(session.inactivityTimer);
+    session.inactivityTimer = null;
+  }
+
   if (sessionId) {
     sessions.delete(sessionId);
     log(`cleaning up session ${sessionId}: ${reason}`);
@@ -177,7 +217,6 @@ async function cleanupSession(session, reason) {
   await Promise.allSettled([
     session.httpTransport?.close(),
     session.stdioTransport?.close(),
-    session.sdkServer?.close(),
   ]);
 }
 
@@ -186,11 +225,28 @@ function requireSession(req, res) {
   const session = sessionId ? sessions.get(sessionId) : undefined;
 
   if (session) {
+    touchSession(session, `${req.method} request`);
     return session;
   }
 
-  res.status(400).send('Invalid or missing MCP session');
+  jsonRpcError(res, 400, -32000, 'Bad Request: missing or invalid MCP session');
   return null;
+}
+
+function touchSession(session, reason) {
+  if (session.cleanedUp || sessionTimeoutMs === 0) {
+    return;
+  }
+
+  if (session.inactivityTimer) {
+    clearTimeout(session.inactivityTimer);
+  }
+
+  session.inactivityTimer = setTimeout(() => {
+    void cleanupSession(session, `inactive for ${sessionTimeoutMs}ms after ${reason}`);
+  }, sessionTimeoutMs);
+
+  session.inactivityTimer.unref?.();
 }
 
 function getSessionId(req) {
@@ -229,6 +285,30 @@ function safeEquals(left, right) {
   }
 
   return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function parseIntegerEnv(name, fallback, { min }) {
+  const rawValue = process.env[name];
+  const parsed = rawValue === undefined || rawValue === ''
+    ? fallback
+    : Number.parseInt(rawValue, 10);
+
+  if (!Number.isInteger(parsed) || parsed < min) {
+    throw new Error(`${name} must be an integer >= ${min}, got: ${rawValue ?? ''}`);
+  }
+
+  return parsed;
+}
+
+function jsonRpcError(res, status, code, message, id = null) {
+  return res.status(status).json({
+    jsonrpc: '2.0',
+    error: {
+      code,
+      message,
+    },
+    id,
+  });
 }
 
 function log(message) {

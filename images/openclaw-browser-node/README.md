@@ -62,6 +62,8 @@ Raw Chromium CDP stays private inside the container at `http://127.0.0.1:9222` b
 - `OPENCLAW_DEVTOOLS_MCP_HOST` (default: `0.0.0.0`)
 - `OPENCLAW_DEVTOOLS_MCP_PORT` (default: `9223`)
 - `OPENCLAW_DEVTOOLS_MCP_PATH` (default: `/mcp`)
+- `OPENCLAW_DEVTOOLS_MCP_MAX_SESSIONS` (default: `16`)
+- `OPENCLAW_DEVTOOLS_MCP_SESSION_TIMEOUT_MS` (default: `300000`, set to `0` to disable inactivity cleanup)
 - `OPENCLAW_DEVTOOLS_MCP_AUTH_BEARER_TOKEN` (default: empty / disabled)
 - `OPENCLAW_DEVTOOLS_MCP_DISABLE_USAGE_STATISTICS` (default: `true`, maps to `chrome-devtools-mcp --no-usage-statistics`)
 - `OPENCLAW_DEVTOOLS_MCP_DISABLE_PERFORMANCE_CRUX` (default: `true`, maps to `chrome-devtools-mcp --no-performance-crux`)
