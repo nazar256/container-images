@@ -148,7 +148,6 @@ function bindSessionResponseLifecycle(session) {
 
 async function createSession() {
   reserveSessionSlot();
-  let slotReserved = true;
   let stdioTransport = null;
 
   try {
@@ -167,7 +166,6 @@ async function createSession() {
       inactivityTimer: null,
       lastActivityAt: Date.now(),
       sessionId: null,
-      slotReserved: true,
       stdioTransport,
     };
 
@@ -185,11 +183,7 @@ async function createSession() {
     touchSession(session);
     return session;
   } catch (error) {
-    if (slotReserved) {
-      reservedSessionSlots -= 1;
-      slotReserved = false;
-    }
-
+    reservedSessionSlots -= 1;
     await stdioTransport?.close().catch(() => {});
     throw error;
   }
@@ -202,10 +196,7 @@ async function cleanupSession(session, reason) {
   }
 
   session.cleanedUp = true;
-  if (session.slotReserved) {
-    session.slotReserved = false;
-    reservedSessionSlots -= 1;
-  }
+  reservedSessionSlots -= 1;
 
   if (session.inactivityTimer) {
     clearTimeout(session.inactivityTimer);
