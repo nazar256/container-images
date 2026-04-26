@@ -21,9 +21,7 @@ if (!Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535) {
 
 const app = express();
 const sessions = new Map();
-let pendingSessions = 0;
-let reservationLocked = false;
-const reservationWaiters = [];
+let reservedSessionSlots = 0;
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '10mb' }));
@@ -148,9 +146,11 @@ function bindSessionResponseLifecycle(session) {
 }
 
 async function createSession() {
-  await reserveSessionSlot();
+  if (reservedSessionSlots >= maxSessions) {
+    throw new Error(`session limit reached (${maxSessions})`);
+  }
 
-  let reservationActive = true;
+  reservedSessionSlots += 1;
   let stdioTransport;
 
   try {
@@ -168,20 +168,14 @@ async function createSession() {
       httpTransport: null,
       inactivityTimer: null,
       lastActivityAt: Date.now(),
-      pending: true,
       sessionId: null,
+      slotReserved: true,
       stdioTransport,
     };
 
     const httpTransport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (sessionId) => {
-        if (session.pending) {
-          session.pending = false;
-          pendingSessions -= 1;
-          reservationActive = false;
-        }
-
         session.sessionId = sessionId;
         sessions.set(sessionId, session);
         log(`created session ${sessionId}`);
@@ -193,9 +187,7 @@ async function createSession() {
     touchSession(session);
     return session;
   } catch (error) {
-    if (reservationActive) {
-      pendingSessions -= 1;
-    }
+    reservedSessionSlots -= 1;
 
     await stdioTransport?.close().catch(() => {});
     throw error;
@@ -209,9 +201,9 @@ async function cleanupSession(session, reason) {
   }
 
   session.cleanedUp = true;
-  if (session.pending) {
-    session.pending = false;
-    pendingSessions -= 1;
+  if (session.slotReserved) {
+    session.slotReserved = false;
+    reservedSessionSlots -= 1;
   }
 
   if (session.inactivityTimer) {
@@ -304,51 +296,14 @@ function safeEquals(left, right) {
   return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-async function reserveSessionSlot() {
-  await acquireReservationLock();
-
-  try {
-    if (sessions.size + pendingSessions >= maxSessions) {
-      throw new Error(`session limit reached (${maxSessions})`);
-    }
-
-    pendingSessions += 1;
-  } finally {
-    releaseReservationLock();
-  }
-}
-
-async function acquireReservationLock() {
-  if (!reservationLocked) {
-    reservationLocked = true;
-    return;
-  }
-
-  await new Promise((resolve) => {
-    reservationWaiters.push(resolve);
-  });
-
-  reservationLocked = true;
-}
-
-function releaseReservationLock() {
-  const nextWaiter = reservationWaiters.shift();
-  if (nextWaiter) {
-    nextWaiter();
-    return;
-  }
-
-  reservationLocked = false;
-}
-
 function parseIntegerEnv(name, fallback, { min }) {
   const rawValue = process.env[name];
-  const parsed = rawValue === undefined || rawValue === ''
-    ? fallback
-    : Number.parseInt(rawValue, 10);
+  const usingFallback = rawValue === undefined || rawValue === '';
+  const parsed = usingFallback ? fallback : Number.parseInt(rawValue, 10);
 
   if (!Number.isInteger(parsed) || parsed < min) {
-    throw new Error(`${name} must be an integer >= ${min}, got: ${rawValue ?? ''}`);
+    const sourceValue = usingFallback ? `fallback ${fallback}` : `value ${rawValue}`;
+    throw new Error(`${name} must be an integer >= ${min}, got ${sourceValue}`);
   }
 
   return parsed;
