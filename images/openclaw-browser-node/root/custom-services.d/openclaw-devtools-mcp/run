@@ -43,11 +43,6 @@ cdp_wait_deadline=$((SECONDS + cdp_wait_timeout))
 
 echo "[openclaw-devtools-mcp] waiting for browser CDP at ${browser_cdp_url} (timeout: ${cdp_wait_timeout}s, interval: ${cdp_wait_interval}s)"
 until curl --silent --show-error --fail --max-time 2 "${browser_cdp_url}/json/version" >/dev/null; do
-  if [ "${SECONDS}" -ge "${cdp_wait_deadline}" ]; then
-    echo "[openclaw-devtools-mcp] timed out after ${cdp_wait_timeout}s waiting for browser CDP at ${browser_cdp_url}; ensure Chromium is running and exposes /json/version (for example, check remote-debugging flags or CHROME_CLI overrides)" >&2
-    exit 1
-  fi
-
   remaining=$((cdp_wait_deadline - SECONDS))
   if [ "${remaining}" -le 0 ]; then
     echo "[openclaw-devtools-mcp] timed out after ${cdp_wait_timeout}s waiting for browser CDP at ${browser_cdp_url}; ensure Chromium is running and exposes /json/version (for example, check remote-debugging flags or CHROME_CLI overrides)" >&2
