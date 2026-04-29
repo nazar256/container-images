@@ -1,0 +1,9 @@
+{
+  "name": "openclaw-devtools-mcp",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "express": "5.2.1"
+  }
+}

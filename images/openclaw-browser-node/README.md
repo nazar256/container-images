@@ -7,8 +7,10 @@ Chromium + OpenClaw node host image built on top of LinuxServer Chromium.
 - Base image defaults to `docker.io/linuxserver/chromium` and is pinned by build arg `CHROMIUM_VERSION` (default: `version-09bef544`).
 - Node.js is pinned by build arg `NODE_VERSION` (default: `22.14.0`) to satisfy current OpenClaw runtime requirements.
 - OpenClaw CLI is installed from npm and pinned by build arg `OPENCLAW_VERSION` (default: `2026.4.9`).
+- Chrome DevTools MCP is installed from npm and pinned by build arg `CHROME_DEVTOOLS_MCP_VERSION` (default: `0.23.0`).
 - Node connectivity defaults to `OPENCLAW_GATEWAY_HOST=openclaw-gateway` and `OPENCLAW_GATEWAY_PORT=3443`.
-- CDP is enabled for the interactive Chromium instance using `CHROME_CLI` with loopback binding and a persistent non-default user data dir.
+- Chromium CDP is enabled for the interactive browser with loopback-only binding and the persistent `CHROMIUM_USER_DATA_DIR` profile.
+- A supervised Streamable HTTP MCP endpoint starts in the same container and proxies to the local Chromium CDP endpoint.
 
 ## Build locally
 
@@ -18,6 +20,7 @@ podman build \
   --build-arg CHROMIUM_VERSION=version-09bef544 \
   --build-arg NODE_VERSION=22.14.0 \
   --build-arg OPENCLAW_VERSION=2026.4.9 \
+  --build-arg CHROME_DEVTOOLS_MCP_VERSION=0.23.0 \
   -f images/openclaw-browser-node/Dockerfile \
   images/openclaw-browser-node
 ```
@@ -29,14 +32,21 @@ podman run -d \
   --name openclaw-browser-node \
   --shm-size=1g \
   -p 3001:3001 \
+  -p 9223:9223 \
   -v openclaw-browser-node-config:/config \
   -e OPENCLAW_GATEWAY_HOST=openclaw-gateway \
   -e OPENCLAW_GATEWAY_PORT=3443 \
   -e OPENCLAW_GATEWAY_TOKEN=replace-me \
+  -e OPENCLAW_DEVTOOLS_MCP_HOST=0.0.0.0 \
+  -e OPENCLAW_DEVTOOLS_MCP_AUTH_BEARER_TOKEN=replace-me-mcp-token \
   openclaw-browser-node:local
 ```
 
 The LinuxServer Chromium web UI is available on `https://localhost:3001`.
+
+The DevTools MCP endpoint is loopback-only by default. To publish it outside the container, set `OPENCLAW_DEVTOOLS_MCP_HOST=0.0.0.0` and provide `OPENCLAW_DEVTOOLS_MCP_AUTH_BEARER_TOKEN`, then use `http://localhost:9223/mcp`.
+
+Raw Chromium CDP stays private inside the container at `http://127.0.0.1:9222` by default and is not intended to be published externally.
 
 ## Runtime environment
 
@@ -46,10 +56,31 @@ The LinuxServer Chromium web UI is available on `https://localhost:3001`.
 - `OPENCLAW_GATEWAY_TOKEN_FILE` (optional secret file path)
 - `CDP_PORT` (default: `9222`)
 - `CHROMIUM_USER_DATA_DIR` (default: `/config/chromium/profile`)
-- `CHROME_CLI` (default includes loopback CDP and persistent user data dir)
+- `CHROME_CLI` (optional override; when unset the container builds a default value that keeps CDP on `127.0.0.1` and reuses `CHROMIUM_USER_DATA_DIR`. If you override it, you must still include Chromium remote-debugging flags for `--remote-debugging-address=127.0.0.1` and `--remote-debugging-port=${CDP_PORT}` so the MCP service can reach `/json/version`; the init step now fails fast if those flags do not match)
 - `OPENCLAW_CONFIG_PATH` (default: `/config/.openclaw/openclaw.json`)
 - `OPENCLAW_RUNTIME_USER` (default: `abc`, runtime user name used inside the container)
 - `OPENCLAW_RUNTIME_GROUP` (default: `abc`, runtime group name used inside the container)
+- `OPENCLAW_DEVTOOLS_MCP_ENABLED` (default: `true`)
+- `OPENCLAW_DEVTOOLS_MCP_HOST` (default: `127.0.0.1`; set to `0.0.0.0` only when you intentionally want to publish the MCP endpoint outside the container)
+- `OPENCLAW_DEVTOOLS_MCP_PORT` (default: `9223`)
+- `OPENCLAW_DEVTOOLS_MCP_PATH` (default: `/mcp`)
+- `OPENCLAW_DEVTOOLS_MCP_MAX_SESSIONS` (default: `16`)
+- `OPENCLAW_DEVTOOLS_MCP_SESSION_TIMEOUT_MS` (default: `300000`, set to `0` to disable inactivity cleanup)
+- `OPENCLAW_DEVTOOLS_MCP_CDP_WAIT_TIMEOUT` (default: `60`, maximum number of seconds the service waits for Chromium CDP before exiting with an error)
+- `OPENCLAW_DEVTOOLS_MCP_CDP_WAIT_INTERVAL` (default: `2`, retry interval in seconds while waiting for Chromium CDP)
+- `OPENCLAW_DEVTOOLS_MCP_AUTH_BEARER_TOKEN` (default: empty / disabled; set this before binding the MCP endpoint beyond loopback)
+- `OPENCLAW_DEVTOOLS_MCP_DISABLE_USAGE_STATISTICS` (default: `true`, maps to `chrome-devtools-mcp --no-usage-statistics`)
+- `OPENCLAW_DEVTOOLS_MCP_DISABLE_PERFORMANCE_CRUX` (default: `true`, maps to `chrome-devtools-mcp --no-performance-crux`)
+- `OPENCLAW_DEVTOOLS_MCP_DISABLE_UPDATE_CHECKS` (default: `true`, exports `CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS=1`)
+
+## MCP endpoint
+
+- Listen host: `OPENCLAW_DEVTOOLS_MCP_HOST` (`127.0.0.1` by default)
+- Listen port: `OPENCLAW_DEVTOOLS_MCP_PORT` (`9223` by default)
+- Path: `OPENCLAW_DEVTOOLS_MCP_PATH` (`/mcp` by default)
+- Intended external integration point: the Streamable HTTP MCP endpoint above, but only after you explicitly bind it beyond loopback and configure bearer auth
+- Raw CDP integration point: internal only at `http://127.0.0.1:9222` by default from inside the container, or `http://127.0.0.1:<CDP_PORT>` when overridden
+- CDP readiness behavior: the MCP service waits up to `OPENCLAW_DEVTOOLS_MCP_CDP_WAIT_TIMEOUT` seconds, retrying every `OPENCLAW_DEVTOOLS_MCP_CDP_WAIT_INTERVAL` seconds, then exits with a clear error if Chromium never exposes `/json/version`
 
 ## Pull from GHCR
 

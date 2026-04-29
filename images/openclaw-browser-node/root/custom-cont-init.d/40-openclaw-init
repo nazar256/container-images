@@ -4,8 +4,52 @@ set -euo pipefail
 runtime_user="${OPENCLAW_RUNTIME_USER:-abc}"
 runtime_group="${OPENCLAW_RUNTIME_GROUP:-abc}"
 
+persist_env() {
+  local name="$1"
+  local value="$2"
+
+  for env_dir in /run/s6/container_environment /var/run/s6/container_environment; do
+    if [ -d "${env_dir}" ]; then
+      printf '%s' "${value}" > "${env_dir}/${name}"
+    fi
+  done
+
+  printf -v "${name}" '%s' "${value}"
+  export "${name}"
+}
+
 mkdir -p "${OPENCLAW_HOME}" "${CHROMIUM_USER_DATA_DIR}"
 chown -R "${runtime_user}:${runtime_group}" "${OPENCLAW_HOME}" "${CHROMIUM_USER_DATA_DIR}"
+
+cdp_port="${CDP_PORT:-9222}"
+case "${cdp_port}" in
+  ''|*[!0-9]*)
+    echo "CDP_PORT must be a numeric TCP port" >&2
+    exit 1
+    ;;
+esac
+
+if [ "${cdp_port}" -lt 1 ] || [ "${cdp_port}" -gt 65535 ]; then
+  echo "CDP_PORT must be between 1 and 65535" >&2
+  exit 1
+fi
+
+if [ -z "${CHROME_CLI:-}" ]; then
+  CHROME_CLI="--remote-debugging-address=127.0.0.1 --remote-debugging-port=${cdp_port} --user-data-dir=${CHROMIUM_USER_DATA_DIR}"
+else
+  if ! [[ "${CHROME_CLI}" =~ (^|[[:space:]])--remote-debugging-address=127\.0\.0\.1($|[[:space:]]) ]]; then
+    echo "CHROME_CLI overrides must include --remote-debugging-address=127.0.0.1 so OPENCLAW_BROWSER_CDP_URL stays reachable" >&2
+    exit 1
+  fi
+
+  if ! [[ "${CHROME_CLI}" =~ (^|[[:space:]])--remote-debugging-port=${cdp_port}($|[[:space:]]) ]]; then
+    echo "CHROME_CLI overrides must include --remote-debugging-port=${cdp_port} so OPENCLAW_BROWSER_CDP_URL matches Chromium" >&2
+    exit 1
+  fi
+fi
+
+persist_env CHROME_CLI "${CHROME_CLI}"
+persist_env OPENCLAW_BROWSER_CDP_URL "http://127.0.0.1:${cdp_port}"
 
 if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
   mkdir -p "$(dirname "${OPENCLAW_CONFIG_PATH}")"
