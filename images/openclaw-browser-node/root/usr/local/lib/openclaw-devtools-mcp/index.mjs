@@ -8,7 +8,8 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
 const browserUrl = process.env.OPENCLAW_BROWSER_CDP_URL ?? `http://127.0.0.1:${process.env.CDP_PORT ?? '9222'}`;
 const listenHost = process.env.OPENCLAW_DEVTOOLS_MCP_HOST ?? '0.0.0.0';
-const listenPort = Number.parseInt(process.env.OPENCLAW_DEVTOOLS_MCP_PORT ?? '9223', 10);
+const listenPortRaw = process.env.OPENCLAW_DEVTOOLS_MCP_PORT ?? '9223';
+const listenPort = parsePort('OPENCLAW_DEVTOOLS_MCP_PORT', listenPortRaw);
 const endpointPath = normalizePath(process.env.OPENCLAW_DEVTOOLS_MCP_PATH ?? '/mcp');
 const bearerToken = process.env.OPENCLAW_DEVTOOLS_MCP_AUTH_BEARER_TOKEN ?? '';
 const disablePerformanceCrux = isTrue(process.env.OPENCLAW_DEVTOOLS_MCP_DISABLE_PERFORMANCE_CRUX ?? 'true');
@@ -16,16 +17,20 @@ const maxSessions = parseIntegerEnv('OPENCLAW_DEVTOOLS_MCP_MAX_SESSIONS', 16, { 
 const sessionTimeoutMs = parseIntegerEnv('OPENCLAW_DEVTOOLS_MCP_SESSION_TIMEOUT_MS', 300000, { min: 0 });
 const sessionTimeoutEnabled = sessionTimeoutMs > 0;
 
-if (!Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535) {
-  throw new Error(`OPENCLAW_DEVTOOLS_MCP_PORT must be a valid TCP port, got: ${process.env.OPENCLAW_DEVTOOLS_MCP_PORT ?? ''}`);
-}
-
 const app = express();
 const sessions = new Map();
 let reservedSessionSlots = 0;
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '10mb' }));
+app.use((error, req, res, next) => {
+  if (isJsonParseError(error)) {
+    return jsonRpcError(res, 400, -32700, 'Parse error');
+  }
+
+  return next(error);
+});
+
 app.use((req, res, next) => {
   if (!bearerToken) {
     return next();
@@ -47,9 +52,12 @@ app.use((req, res, next) => {
 });
 
 app.post(endpointPath, async (req, res) => {
+  let session = null;
+  let createdSession = false;
+
   try {
     const requestedSessionId = getSessionId(req);
-    let session = requestedSessionId ? sessions.get(requestedSessionId) : undefined;
+    session = requestedSessionId ? sessions.get(requestedSessionId) : undefined;
 
     if (!session) {
       if (requestedSessionId || !isInitializeRequest(req.body)) {
@@ -58,8 +66,9 @@ app.post(endpointPath, async (req, res) => {
 
       try {
         session = await createSession();
+        createdSession = true;
       } catch (error) {
-        if (error instanceof Error && error.message.startsWith('session limit reached')) {
+        if (error instanceof SessionLimitError) {
           return jsonRpcError(res, 429, -32002, error.message);
         }
 
@@ -71,6 +80,15 @@ app.post(endpointPath, async (req, res) => {
     return await session.httpTransport.handleRequest(req, res, req.body);
   } catch (error) {
     console.error('[openclaw-devtools-mcp] failed handling POST request', error);
+
+    if (createdSession && session) {
+      await cleanupSession(session, 'request handling failed');
+    }
+
+    if (res.headersSent) {
+      return;
+    }
+
     return jsonRpcError(res, 500, -32603, 'Internal server error');
   }
 });
@@ -296,7 +314,7 @@ function safeEquals(left, right) {
 
 function reserveSessionSlot() {
   if (reservedSessionSlots >= maxSessions) {
-    throw new Error(`session limit reached (${maxSessions})`);
+    throw new SessionLimitError(`session limit reached (${maxSessions})`);
   }
 
   reservedSessionSlots += 1;
@@ -305,7 +323,7 @@ function reserveSessionSlot() {
 function parseIntegerEnv(name, fallback, { min }) {
   const rawValue = process.env[name];
   const usingFallback = rawValue === undefined || rawValue === '';
-  const parsed = usingFallback ? fallback : Number.parseInt(rawValue, 10);
+  const parsed = usingFallback ? fallback : parseStrictInteger(rawValue);
 
   if (!Number.isInteger(parsed) || parsed < min) {
     const sourceValue = usingFallback
@@ -315,6 +333,27 @@ function parseIntegerEnv(name, fallback, { min }) {
   }
 
   return parsed;
+}
+
+function parsePort(name, rawValue) {
+  const parsed = parseStrictInteger(rawValue);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+    throw new Error(`${name} must be a valid TCP port, got: ${rawValue}`);
+  }
+
+  return parsed;
+}
+
+function parseStrictInteger(rawValue) {
+  if (!/^\d+$/.test(rawValue)) {
+    return Number.NaN;
+  }
+
+  return Number.parseInt(rawValue, 10);
+}
+
+function isJsonParseError(error) {
+  return error instanceof SyntaxError && error.status === 400 && 'body' in error;
 }
 
 function jsonRpcError(res, status, code, message, id = null) {
@@ -331,3 +370,5 @@ function jsonRpcError(res, status, code, message, id = null) {
 function log(message) {
   console.error(`[openclaw-devtools-mcp] ${message}`);
 }
+
+class SessionLimitError extends Error {}
