@@ -36,6 +36,16 @@ fi
 
 if [ -z "${CHROME_CLI:-}" ]; then
   CHROME_CLI="--remote-debugging-address=127.0.0.1 --remote-debugging-port=${cdp_port} --user-data-dir=${CHROMIUM_USER_DATA_DIR}"
+else
+  if ! [[ "${CHROME_CLI}" =~ (^|[[:space:]])--remote-debugging-address(=|[[:space:]]+)127\.0\.0\.1($|[[:space:]]) ]]; then
+    echo "CHROME_CLI overrides must include --remote-debugging-address=127.0.0.1 so OPENCLAW_BROWSER_CDP_URL stays reachable" >&2
+    exit 1
+  fi
+
+  if ! [[ "${CHROME_CLI}" =~ (^|[[:space:]])--remote-debugging-port(=|[[:space:]]+)${cdp_port}($|[[:space:]]) ]]; then
+    echo "CHROME_CLI overrides must include --remote-debugging-port=${cdp_port} so OPENCLAW_BROWSER_CDP_URL matches Chromium" >&2
+    exit 1
+  fi
 fi
 
 persist_env CHROME_CLI "${CHROME_CLI}"

@@ -37,7 +37,7 @@ app.use((req, res, next) => {
   }
 
   const authorization = req.header('authorization') ?? '';
-  if (safeEquals(authorization, `Bearer ${bearerToken}`)) {
+  if (hasValidBearerAuthorization(authorization, bearerToken)) {
     return next();
   }
 
@@ -310,6 +310,16 @@ function safeEquals(left, right) {
   }
 
   return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function hasValidBearerAuthorization(authorization, expectedToken) {
+  const parts = authorization.trim().split(/\s+/);
+  if (parts.length !== 2) {
+    return false;
+  }
+
+  const [scheme, token] = parts;
+  return scheme.toLowerCase() === 'bearer' && safeEquals(token, expectedToken);
 }
 
 function reserveSessionSlot() {
