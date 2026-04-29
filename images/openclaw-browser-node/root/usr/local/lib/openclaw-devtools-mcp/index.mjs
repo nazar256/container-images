@@ -6,13 +6,13 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
-const browserUrl = process.env.OPENCLAW_BROWSER_CDP_URL ?? `http://127.0.0.1:${process.env.CDP_PORT ?? '9222'}`;
-const listenHost = process.env.OPENCLAW_DEVTOOLS_MCP_HOST ?? '0.0.0.0';
-const listenPortRaw = process.env.OPENCLAW_DEVTOOLS_MCP_PORT ?? '9223';
+const browserUrl = envOrDefault('OPENCLAW_BROWSER_CDP_URL', `http://127.0.0.1:${envOrDefault('CDP_PORT', '9222')}`);
+const listenHost = envOrDefault('OPENCLAW_DEVTOOLS_MCP_HOST', '127.0.0.1');
+const listenPortRaw = envOrDefault('OPENCLAW_DEVTOOLS_MCP_PORT', '9223');
 const listenPort = parsePort('OPENCLAW_DEVTOOLS_MCP_PORT', listenPortRaw);
-const endpointPath = normalizePath(process.env.OPENCLAW_DEVTOOLS_MCP_PATH ?? '/mcp');
-const bearerToken = process.env.OPENCLAW_DEVTOOLS_MCP_AUTH_BEARER_TOKEN ?? '';
-const disablePerformanceCrux = isTrue(process.env.OPENCLAW_DEVTOOLS_MCP_DISABLE_PERFORMANCE_CRUX ?? 'true');
+const endpointPath = normalizePath(envOrDefault('OPENCLAW_DEVTOOLS_MCP_PATH', '/mcp'));
+const bearerToken = envOrDefault('OPENCLAW_DEVTOOLS_MCP_AUTH_BEARER_TOKEN', '');
+const disablePerformanceCrux = isTrue(envOrDefault('OPENCLAW_DEVTOOLS_MCP_DISABLE_PERFORMANCE_CRUX', 'true'));
 const maxSessions = parseIntegerEnv('OPENCLAW_DEVTOOLS_MCP_MAX_SESSIONS', 16, { min: 1 });
 const sessionTimeoutMs = parseIntegerEnv('OPENCLAW_DEVTOOLS_MCP_SESSION_TIMEOUT_MS', 300000, { min: 0 });
 const sessionTimeoutEnabled = sessionTimeoutMs > 0;
@@ -282,7 +282,7 @@ function getSessionId(req) {
 function buildChromeDevToolsArgs() {
   const args = [`--browserUrl=${browserUrl}`];
 
-  if (isTrue(process.env.OPENCLAW_DEVTOOLS_MCP_DISABLE_USAGE_STATISTICS ?? 'true')) {
+  if (isTrue(envOrDefault('OPENCLAW_DEVTOOLS_MCP_DISABLE_USAGE_STATISTICS', 'true'))) {
     args.push('--no-usage-statistics');
   }
 
@@ -350,6 +350,16 @@ function parseStrictInteger(rawValue) {
   }
 
   return Number.parseInt(rawValue, 10);
+}
+
+function envOrDefault(name, fallback) {
+  const rawValue = process.env[name];
+  if (typeof rawValue !== 'string') {
+    return fallback;
+  }
+
+  const trimmedValue = rawValue.trim();
+  return trimmedValue || fallback;
 }
 
 function isJsonParseError(error) {
