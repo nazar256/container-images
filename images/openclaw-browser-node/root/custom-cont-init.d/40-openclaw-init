@@ -35,10 +35,10 @@ if [ "${cdp_port}" -lt 1 ] || [ "${cdp_port}" -gt 65535 ]; then
 fi
 
 if [ -z "${CHROME_CLI:-}" ]; then
-  CHROME_CLI="--remote-debugging-address=127.0.0.1 --remote-debugging-port=${cdp_port} --user-data-dir=${CHROMIUM_USER_DATA_DIR}"
+  CHROME_CLI="--remote-debugging-address=0.0.0.0 --remote-debugging-port=${cdp_port} --user-data-dir=${CHROMIUM_USER_DATA_DIR}"
 else
-  if ! [[ "${CHROME_CLI}" =~ (^|[[:space:]])--remote-debugging-address=127\.0\.0\.1($|[[:space:]]) ]]; then
-    echo "CHROME_CLI overrides must include --remote-debugging-address=127.0.0.1 so OPENCLAW_BROWSER_CDP_URL stays reachable" >&2
+  if ! [[ "${CHROME_CLI}" =~ (^|[[:space:]])--remote-debugging-address=0\.0\.0\.0($|[[:space:]]) ]]; then
+    echo "CHROME_CLI overrides must include --remote-debugging-address=0.0.0.0 so Chromium CDP binds on all container interfaces" >&2
     exit 1
   fi
 

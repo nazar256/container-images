@@ -61,6 +61,9 @@ smoke-image: podman-check
 		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /custom-services.d/openclaw-node/run'; \
 		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /custom-services.d/openclaw-devtools-mcp/run'; \
 		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -f /usr/local/lib/openclaw-devtools-mcp/index.mjs'; \
+		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /usr/bin/chromium'; \
+		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /usr/bin/chromium-browser'; \
+		podman run --rm --entrypoint bash $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'source /custom-cont-init.d/40-openclaw-init; [[ "$${CHROME_CLI}" == *"--remote-debugging-address=0.0.0.0"* ]]; [[ "$${CHROME_CLI}" == *"--remote-debugging-port=$${CDP_PORT}"* ]]; [[ "$${OPENCLAW_BROWSER_CDP_URL}" == "http://127.0.0.1:$${CDP_PORT}" ]]'; \
 	else \
 		echo "No smoke test configured for $(IMAGE)" >&2; \
 		exit 1; \
