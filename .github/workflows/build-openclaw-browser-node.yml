@@ -50,7 +50,7 @@ jobs:
           docker run --rm --entrypoint sh local/openclaw-browser-node:smoke -ceu 'test -f /usr/local/lib/openclaw-devtools-mcp/index.mjs'
           docker run --rm --entrypoint sh local/openclaw-browser-node:smoke -ceu 'test -x /usr/bin/chromium'
           docker run --rm --entrypoint sh local/openclaw-browser-node:smoke -ceu 'test -x /usr/bin/chromium-browser'
-          docker run --rm --entrypoint bash local/openclaw-browser-node:smoke -ceu 'source /custom-cont-init.d/40-openclaw-init; [[ "$${CHROME_CLI}" == *"--remote-debugging-address=0.0.0.0"* ]]; [[ "$${CHROME_CLI}" == *"--remote-debugging-port=$${CDP_PORT}"* ]]; [[ "$${OPENCLAW_BROWSER_CDP_URL}" == "http://127.0.0.1:$${CDP_PORT}" ]]'
+          docker run --rm --entrypoint bash local/openclaw-browser-node:smoke -ceu 'source /custom-cont-init.d/40-openclaw-init; [[ "${CHROME_CLI}" == *"--remote-debugging-address=0.0.0.0"* ]]; [[ "${CHROME_CLI}" == *"--remote-debugging-port=${CDP_PORT}"* ]]; [[ "${OPENCLAW_BROWSER_CDP_URL}" == "http://127.0.0.1:${CDP_PORT}" ]]'
 
   build:
     needs: smoke
