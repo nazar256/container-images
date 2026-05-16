@@ -1,0 +1,8 @@
+{
+  "name": "openclaw-cdp-proxy",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ws": "8.18.3"
+  }
+}

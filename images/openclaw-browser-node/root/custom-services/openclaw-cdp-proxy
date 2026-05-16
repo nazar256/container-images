@@ -1,0 +1,68 @@
+#!/usr/bin/with-contenv bash
+set -euo pipefail
+
+runtime_user="${OPENCLAW_RUNTIME_USER:-abc}"
+browser_cdp_url="${OPENCLAW_BROWSER_CDP_URL:-http://127.0.0.1:${CDP_PORT:-9222}}"
+proxy_host="${CDP_PROXY_HOST:-0.0.0.0}"
+proxy_port="${CDP_PROXY_PORT:-9223}"
+cdp_wait_timeout="${CDP_PROXY_CDP_WAIT_TIMEOUT:-60}"
+cdp_wait_interval="${CDP_PROXY_CDP_WAIT_INTERVAL:-2}"
+
+is_true() {
+  case "${1,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if ! is_true "${CDP_PROXY_ENABLED:-true}"; then
+  echo "[openclaw-cdp-proxy] disabled; keeping service idle"
+  exec s6-setuidgid "${runtime_user}" sleep infinity
+fi
+
+if [ -n "${CDP_PROXY_BEARER_TOKEN_FILE:-}" ]; then
+  if [ ! -r "${CDP_PROXY_BEARER_TOKEN_FILE}" ]; then
+    echo "[openclaw-cdp-proxy] CDP_PROXY_BEARER_TOKEN_FILE is not readable: ${CDP_PROXY_BEARER_TOKEN_FILE}" >&2
+    exit 1
+  fi
+
+  export CDP_PROXY_BEARER_TOKEN="$(tr -d '\r\n' < "${CDP_PROXY_BEARER_TOKEN_FILE}")"
+fi
+
+if [ -z "${CDP_PROXY_BEARER_TOKEN:-}" ]; then
+  echo "[openclaw-cdp-proxy] CDP_PROXY_BEARER_TOKEN or CDP_PROXY_BEARER_TOKEN_FILE is required when the proxy is enabled" >&2
+  exit 1
+fi
+
+if ! [[ "${cdp_wait_timeout}" =~ ^[0-9]+$ ]] || [ "${cdp_wait_timeout}" -le 0 ]; then
+  echo "[openclaw-cdp-proxy] CDP_PROXY_CDP_WAIT_TIMEOUT must be a positive integer number of seconds; got '${cdp_wait_timeout}'" >&2
+  exit 1
+fi
+
+if ! [[ "${cdp_wait_interval}" =~ ^[0-9]+$ ]] || [ "${cdp_wait_interval}" -le 0 ]; then
+  echo "[openclaw-cdp-proxy] CDP_PROXY_CDP_WAIT_INTERVAL must be a positive integer number of seconds; got '${cdp_wait_interval}'" >&2
+  exit 1
+fi
+
+cdp_wait_deadline=$((SECONDS + cdp_wait_timeout))
+
+echo "[openclaw-cdp-proxy] waiting for browser CDP at ${browser_cdp_url} (timeout: ${cdp_wait_timeout}s, interval: ${cdp_wait_interval}s)"
+until curl --silent --show-error --fail --max-time 2 "${browser_cdp_url}/json/version" >/dev/null; do
+  remaining=$((cdp_wait_deadline - SECONDS))
+  if [ "${remaining}" -le 0 ]; then
+    echo "[openclaw-cdp-proxy] timed out after ${cdp_wait_timeout}s waiting for browser CDP at ${browser_cdp_url}; ensure Chromium is running and exposes /json/version on loopback" >&2
+    exit 1
+  fi
+
+  sleep_for="${cdp_wait_interval}"
+  if [ "${remaining}" -lt "${sleep_for}" ]; then
+    sleep_for="${remaining}"
+  fi
+
+  echo "[openclaw-cdp-proxy] browser CDP not ready yet; retrying in ${sleep_for}s (${remaining}s remaining)"
+  sleep "${sleep_for}"
+done
+
+echo "[openclaw-cdp-proxy] starting authenticated CDP proxy on ${proxy_host}:${proxy_port}${CDP_PROXY_BROWSER_WS_PATH:-/devtools/browser}"
+exec s6-setuidgid "${runtime_user}" \
+  node /usr/local/lib/openclaw-cdp-proxy/index.mjs

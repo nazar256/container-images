@@ -56,14 +56,13 @@ smoke-image: podman-check
 		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -d /home/node/.config/opencode-telegram-bot'; \
 	elif [ "$(IMAGE)" = "openclaw-browser-node" ]; then \
 		podman run --rm --entrypoint openclaw $(LOCAL_TAG_PREFIX)$(IMAGE):test --version >/dev/null; \
-		podman run --rm --entrypoint chrome-devtools-mcp $(LOCAL_TAG_PREFIX)$(IMAGE):test --version >/dev/null; \
 		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /custom-cont-init.d/40-openclaw-init'; \
-		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /custom-services.d/openclaw-node/run'; \
-		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /custom-services.d/openclaw-devtools-mcp/run'; \
-		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -f /usr/local/lib/openclaw-devtools-mcp/index.mjs'; \
+		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -f /custom-services.d/openclaw-node && test -x /custom-services.d/openclaw-node'; \
+		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -f /custom-services.d/openclaw-cdp-proxy && test -x /custom-services.d/openclaw-cdp-proxy'; \
+		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -f /usr/local/lib/openclaw-cdp-proxy/index.mjs'; \
 		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /usr/bin/chromium'; \
 		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /usr/bin/chromium-browser'; \
-		podman run --rm --entrypoint bash $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'source /custom-cont-init.d/40-openclaw-init; [[ "$${CHROME_CLI}" == *"--remote-debugging-address=0.0.0.0"* ]]; [[ "$${CHROME_CLI}" == *"--remote-debugging-port=$${CDP_PORT}"* ]]; [[ "$${OPENCLAW_BROWSER_CDP_URL}" == "http://127.0.0.1:$${CDP_PORT}" ]]'; \
+		podman run --rm --entrypoint bash $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'source /custom-cont-init.d/40-openclaw-init; [[ "$${CHROME_CLI}" == *"--remote-debugging-address=127.0.0.1"* ]]; [[ "$${CHROME_CLI}" == *"--remote-debugging-port=$${CDP_PORT}"* ]]; [[ "$${CHROME_CLI}" == *"--user-data-dir=$${CHROMIUM_USER_DATA_DIR}"* ]]; [[ "$${OPENCLAW_BROWSER_CDP_URL}" == "http://127.0.0.1:$${CDP_PORT}" ]]'; \
 	else \
 		echo "No smoke test configured for $(IMAGE)" >&2; \
 		exit 1; \

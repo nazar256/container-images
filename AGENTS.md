@@ -23,6 +23,7 @@ Rules for automation agents working in this repository.
   - `.github/workflows/build-<image_name>.yml`
   - `.github/workflows/_reusable-build-and-push.yml`
 - If reusable workflow changes, ensure every image workflow still references it in `paths`.
+- When copying shell snippets between `Makefile` recipes and GitHub Actions `run:` blocks, re-check variable escaping: Make recipes usually need `$$VAR` / `$${VAR}`, while GitHub Actions `run:` blocks should usually use normal shell `$VAR` / `${VAR}`.
 
 ## Local validation (mandatory)
 
