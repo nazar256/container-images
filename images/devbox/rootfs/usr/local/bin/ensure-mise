@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${HOME:-}" = "" ]; then
+  echo "HOME is not set" >&2
+  exit 1
+fi
+
+install_path="${HOME}/.local/bin/mise"
+
+if command -v mise >/dev/null 2>&1; then
+  mise --version
+  exit 0
+fi
+
+if [ -x "${install_path}" ]; then
+  "${install_path}" --version
+  exit 0
+fi
+
+if ! command -v curl >/dev/null 2>&1; then
+  echo "curl is required to install mise" >&2
+  exit 1
+fi
+
+mkdir -p "${HOME}/.local/bin"
+
+echo "Installing mise into ${install_path}" >&2
+curl -fsSL https://mise.run | MISE_INSTALL_PATH="${install_path}" sh
+
+"${install_path}" --version
+

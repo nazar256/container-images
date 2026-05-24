@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ -f /etc/profile.d/devbox.sh ]; then
+  # shellcheck disable=SC1091
+  source /etc/profile.d/devbox.sh
+fi
+
+if [ ! -w "${HOME}" ]; then
+  echo "ERROR: ${HOME} is not writable by $(id -u):$(id -g). If you bind-mount an empty /home/dev, ensure it is writable by uid/gid or use Podman volume options like ':U,Z'." >&2
+  ls -ld "${HOME}" >&2 || true
+  exit 1
+fi
+
+mkdir -p \
+  "${HOME}/.cache/supervisor" \
+  "${HOME}/.config/supervisor/conf.d" \
+  "${HOME}/.local/bin" \
+  "${HOME}/.local/share" \
+  "${HOME}/.local/state" \
+  "${HOME}/.cache/go/pkg/mod" \
+  "${HOME}/.cache/go/build" \
+  "${HOME}/.cache/npm" \
+  "${HOME}/.cache/terraform/plugin-cache" \
+  "${HOME}/go/bin"
+
+if [ ! -f "${HOME}/.bash_profile" ]; then
+  cat > "${HOME}/.bash_profile" <<'EOF'
+if [ -f /etc/profile ]; then . /etc/profile; fi
+if [ -f /etc/profile.d/devbox.sh ]; then . /etc/profile.d/devbox.sh; fi
+EOF
+  chmod 0644 "${HOME}/.bash_profile"
+fi
+
+if [ ! -f "${HOME}/.bashrc" ]; then
+  cat > "${HOME}/.bashrc" <<'EOF'
+if [ -f /etc/profile.d/devbox.sh ]; then . /etc/profile.d/devbox.sh; fi
+EOF
+  chmod 0644 "${HOME}/.bashrc"
+fi
+
+if [ ! -f "${HOME}/.config/supervisor/conf.d/README.txt" ]; then
+  cat > "${HOME}/.config/supervisor/conf.d/README.txt" <<'EOF'
+Drop supervisord program configs here as *.conf, e.g.:
+
+  ~/.config/supervisor/conf.d/my-service.conf
+
+Then inside the container:
+
+  supervisorctl reread
+  supervisorctl update
+  supervisorctl status
+EOF
+  chmod 0644 "${HOME}/.config/supervisor/conf.d/README.txt"
+fi
+
+ensure-mise >/dev/stderr
+
+exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf

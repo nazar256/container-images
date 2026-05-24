@@ -1,0 +1,75 @@
+name: build devbox
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - images/devbox/**
+      - .github/workflows/build-devbox.yml
+      - .github/workflows/_reusable-build-and-push.yml
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build smoke image
+        run: |
+          docker build \
+            -t local/devbox:smoke \
+            -f images/devbox/Dockerfile \
+            images/devbox
+
+      - name: Smoke check base usability
+        run: |
+          docker run --rm local/devbox:smoke bash -lc 'whoami | grep -qx dev'
+          docker run --rm local/devbox:smoke bash -lc 'test "$HOME" = /home/dev'
+          docker run --rm local/devbox:smoke bash -lc 'test -r /etc/profile.d/devbox.sh'
+          docker run --rm local/devbox:smoke bash -lc 'command -v supervisord >/dev/null && command -v supervisorctl >/dev/null'
+          docker run --rm local/devbox:smoke bash -lc 'test -x /usr/local/bin/ensure-mise && command -v ensure-mise >/dev/null'
+          docker run --rm local/devbox:smoke bash -lc 'ensure-mise >/dev/null && mise --version'
+          docker run --rm local/devbox:smoke bash -lc 'pipx --version'
+          docker run --rm local/devbox:smoke bash -lc 'command -v git curl jq rg tmux python3 >/dev/null'
+          docker run --rm local/devbox:smoke bash -lc 'source /etc/profile.d/devbox.sh && echo "$PATH" | grep -q "$HOME/.local/bin" && echo "$PATH" | grep -q "$HOME/.local/share/mise/shims"'
+          docker run --rm local/devbox:smoke bash -lc '
+            mkdir -p "$HOME/.cache/supervisor" "$HOME/.config/supervisor/conf.d";
+            cat > "$HOME/.config/supervisor/conf.d/echo.conf" <<EOF
+            [program:echo-once]
+            command=/bin/sleep 60
+            autorestart=false
+            startsecs=0
+            stdout_logfile=/home/dev/.cache/supervisor/echo-once.log
+            stderr_logfile=/home/dev/.cache/supervisor/echo-once.err
+            EOF
+            supervisord -c /etc/supervisor/supervisord.conf &
+            for i in $(seq 1 20); do supervisorctl status >/dev/null 2>&1 && break; sleep 0.2; done
+            supervisorctl status | grep -q "^echo-once"
+            supervisorctl shutdown
+          '
+
+      - name: Smoke check persistent /home/dev behavior
+        run: |
+          tmp_home="$(mktemp -d)"
+          chmod 0777 "${tmp_home}"
+          docker run -d --name devbox-seed -v "${tmp_home}:/home/dev" local/devbox:smoke >/dev/null
+          docker exec devbox-seed bash -lc 'test -f "$HOME/.bash_profile" && test -f "$HOME/.bashrc" && test -f "$HOME/.config/supervisor/conf.d/README.txt"'
+          docker exec devbox-seed bash -lc 'for i in $(seq 1 50); do mise --version >/dev/null 2>&1 && break; sleep 0.2; done; mise --version'
+          docker stop devbox-seed >/dev/null
+          docker rm devbox-seed >/dev/null
+
+  build:
+    needs: smoke
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_reusable-build-and-push.yml
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    with:
+      image_name: devbox
+      context: images/devbox
+      dockerfile: images/devbox/Dockerfile

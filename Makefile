@@ -63,6 +63,37 @@ smoke-image: podman-check
 		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /usr/bin/chromium'; \
 		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /usr/bin/chromium-browser'; \
 		podman run --rm --entrypoint bash $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'source /custom-cont-init.d/40-openclaw-init; [[ "$${CHROME_CLI}" == *"--remote-debugging-address=127.0.0.1"* ]]; [[ "$${CHROME_CLI}" == *"--remote-debugging-port=$${CDP_PORT}"* ]]; [[ "$${CHROME_CLI}" == *"--user-data-dir=$${CHROMIUM_USER_DATA_DIR}"* ]]; [[ "$${OPENCLAW_BROWSER_CDP_URL}" == "http://127.0.0.1:$${CDP_PORT}" ]]'; \
+	elif [ "$(IMAGE)" = "devbox" ]; then \
+		podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'whoami | grep -qx dev'; \
+		podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'test "$$HOME" = /home/dev'; \
+		podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'test -r /etc/profile.d/devbox.sh'; \
+		podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'command -v supervisord >/dev/null && command -v supervisorctl >/dev/null'; \
+		podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'test -x /usr/local/bin/ensure-mise && command -v ensure-mise >/dev/null'; \
+		podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'pipx --version'; \
+		podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'command -v git curl jq rg tmux python3 >/dev/null'; \
+		podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc '\
+			mkdir -p "$$HOME/.cache/supervisor" "$$HOME/.config/supervisor/conf.d"; \
+			conf="$$HOME/.config/supervisor/conf.d/echo.conf"; \
+			printf "%s\n" \
+				"[program:echo-once]" \
+				"command=/bin/sleep 60" \
+				"autorestart=false" \
+				"startsecs=0" \
+				"stdout_logfile=/home/dev/.cache/supervisor/echo-once.log" \
+				"stderr_logfile=/home/dev/.cache/supervisor/echo-once.err" \
+				> "$$conf"; \
+			supervisord -c /etc/supervisor/supervisord.conf & \
+			for i in $$(seq 1 20); do supervisorctl status >/dev/null 2>&1 && break; sleep 0.2; done; \
+			supervisorctl status | grep -q "^echo-once"; \
+			supervisorctl shutdown; \
+		'; \
+		tmp_home="$$(mktemp -d)"; \
+		ctr_id="$$(podman run -d -v "$${tmp_home}:/home/dev:U,Z" $(LOCAL_TAG_PREFIX)$(IMAGE):test)"; \
+		podman exec "$${ctr_id}" bash -lc 'test -f "$$HOME/.bash_profile" && test -f "$$HOME/.bashrc" && test -f "$$HOME/.config/supervisor/conf.d/README.txt"'; \
+		podman exec "$${ctr_id}" bash -lc 'for i in $$(seq 1 50); do mise --version >/dev/null 2>&1 && break; sleep 0.2; done; mise --version'; \
+		podman rm -f "$${ctr_id}" >/dev/null; \
+		podman run --rm -v "$${tmp_home}:/home/dev:U,Z" $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'ensure-mise >/dev/null && test -x "$$HOME/.local/bin/mise" && mise --version'; \
+		podman run --rm -v "$${tmp_home}:/home/dev:U,Z" $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'ensure-mise >/dev/null && mise --version'; \
 	else \
 		echo "No smoke test configured for $(IMAGE)" >&2; \
 		exit 1; \

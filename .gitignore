@@ -11,6 +11,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Agent temp
+.tmp/
+
 # Build output
 build/
 dist/
