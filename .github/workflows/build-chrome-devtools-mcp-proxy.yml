@@ -50,6 +50,8 @@ jobs:
 
       - name: Smoke check entrypoint validation and runtime process model
         run: |
+          set -euo pipefail
+
           mkdir -p .tmp
 
           cat > .tmp/chrome-devtools-mcp-proxy-initialize.json <<'EOF'
@@ -192,12 +194,36 @@ jobs:
               -H "Accept: application/json, text/event-stream" \
               --data-binary @/tmp/initialize.json \
               > /tmp/initialize-response.txt
-            grep -q "HTTP/1.1 200 OK" /tmp/initialize-response.txt
-            grep -qi "content-type: text/event-stream" /tmp/initialize-response.txt
-            grep -qi "mcp-session-id:" /tmp/initialize-response.txt
-            grep -q "\"jsonrpc\":\"2.0\"" /tmp/initialize-response.txt
-            grep -q "\"id\":1" /tmp/initialize-response.txt
-            grep -q "\"name\":\"chrome_devtools\"" /tmp/initialize-response.txt
+
+            if ! grep -qE "^HTTP/[^ ]+ 200" /tmp/initialize-response.txt; then
+              echo "initialize response missing 200 HTTP status line" >&2
+              cat /tmp/initialize-response.txt >&2 || true
+              exit 1
+            fi
+
+            if ! grep -qi "mcp-session-id:" /tmp/initialize-response.txt; then
+              echo "initialize response missing mcp-session-id header" >&2
+              cat /tmp/initialize-response.txt >&2 || true
+              exit 1
+            fi
+
+            if ! grep -q "\"jsonrpc\":\"2.0\"" /tmp/initialize-response.txt; then
+              echo "initialize response missing jsonrpc marker" >&2
+              cat /tmp/initialize-response.txt >&2 || true
+              exit 1
+            fi
+
+            if ! grep -q "\"id\":1" /tmp/initialize-response.txt; then
+              echo "initialize response missing id marker" >&2
+              cat /tmp/initialize-response.txt >&2 || true
+              exit 1
+            fi
+
+            if ! grep -q "\"name\":\"chrome_devtools\"" /tmp/initialize-response.txt; then
+              echo "initialize response missing server name marker" >&2
+              cat /tmp/initialize-response.txt >&2 || true
+              exit 1
+            fi
           '
 
           docker exec "$api_key_container_id" sh -ceu '
