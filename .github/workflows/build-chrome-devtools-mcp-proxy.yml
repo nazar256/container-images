@@ -193,6 +193,17 @@ jobs:
             test "$(curl -sS -H "X-API-Key: dummy-incoming-api-key" -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)" = 400
           '
 
+          docker exec "$api_key_container_id" sh -ceu '
+            processes="$(ps -eo args=)"
+            mcp_proxy_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[m]cp-proxy( |$)")"
+            chrome_devtools_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[c]hrome-devtools-mcp( |$)")"
+            if [ "$mcp_proxy_count" -ne 1 ] || [ "$chrome_devtools_count" -ne 1 ]; then
+              echo "unexpected startup process counts: mcp-proxy=$mcp_proxy_count chrome-devtools-mcp=$chrome_devtools_count" >&2
+              printf "%s\n" "$processes" >&2
+              exit 1
+            fi
+          '
+
           docker cp .tmp/chrome-devtools-mcp-proxy-initialize.json "$api_key_container_id:/tmp/initialize.json"
           docker exec "$api_key_container_id" sh -ceu '
             curl -i -sS -X POST http://127.0.0.1:8000/mcp \
@@ -234,9 +245,15 @@ jobs:
           '
 
           docker exec "$api_key_container_id" sh -ceu '
-            test "$(ps -eo args= | grep -Ec "(^|/)[m]cp-proxy( |$)")" -eq 1
-            test "$(ps -eo args= | grep -Ec "(^|/)[c]hrome-devtools-mcp( |$)")" -eq 1
-            ps -eo args= | grep -Eq "(^|/)[m]cp-proxy( |$).+ -- chrome-devtools-mcp "
+            processes="$(ps -eo args=)"
+            mcp_proxy_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[m]cp-proxy( |$)")"
+            chrome_devtools_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[c]hrome-devtools-mcp( |$)")"
+            if [ "$mcp_proxy_count" -ne 1 ] || [ "$chrome_devtools_count" -gt 1 ]; then
+              echo "unexpected post-initialize process counts: mcp-proxy=$mcp_proxy_count chrome-devtools-mcp=$chrome_devtools_count" >&2
+              printf "%s\n" "$processes" >&2
+              exit 1
+            fi
+            printf "%s\n" "$processes" | grep -Eq "(^|/)[m]cp-proxy( |$).+ -- chrome-devtools-mcp "
           '
 
   build:
