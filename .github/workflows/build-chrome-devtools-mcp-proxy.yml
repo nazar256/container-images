@@ -202,8 +202,8 @@ jobs:
 
           docker exec "$api_key_container_id" sh -ceu '
             processes="$(ps -ww -eo args=)"
-            mcp_proxy_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[m]cp-proxy( |$)")"
-            chrome_devtools_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[c]hrome-devtools-mcp( |$)")"
+            mcp_proxy_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[m]cp-proxy( |$)" || true)"
+            chrome_devtools_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[c]hrome-devtools-mcp( |$)" || true)"
             if [ "$mcp_proxy_count" -ne 1 ] || [ "$chrome_devtools_count" -ne 1 ]; then
               echo "unexpected startup process counts: mcp-proxy=$mcp_proxy_count chrome-devtools-mcp=$chrome_devtools_count" >&2
               printf "%s\n" "$processes" >&2
@@ -253,8 +253,8 @@ jobs:
 
           docker exec "$api_key_container_id" sh -ceu '
             processes="$(ps -ww -eo args=)"
-            mcp_proxy_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[m]cp-proxy( |$)")"
-            chrome_devtools_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[c]hrome-devtools-mcp( |$)")"
+            mcp_proxy_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[m]cp-proxy( |$)" || true)"
+            chrome_devtools_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[c]hrome-devtools-mcp( |$)" || true)"
             if [ "$mcp_proxy_count" -ne 1 ] || [ "$chrome_devtools_count" -gt 1 ]; then
               echo "unexpected post-initialize process counts: mcp-proxy=$mcp_proxy_count chrome-devtools-mcp=$chrome_devtools_count" >&2
               printf "%s\n" "$processes" >&2
