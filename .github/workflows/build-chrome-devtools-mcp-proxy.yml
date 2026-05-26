@@ -137,10 +137,11 @@ jobs:
 
           mkdir -p .tmp/chrome-devtools-mcp-proxy-smoke
           tmpdir=".tmp/chrome-devtools-mcp-proxy-smoke"
+          tmpdir_abs="$PWD/$tmpdir"
           printf '%s\n' 'dummy-browser-cdp-token' > "$tmpdir/browser_cdp_token"
 
           container_id="$(docker run -d \
-            -v "$tmpdir:/run/secrets:ro" \
+            -v "$tmpdir_abs:/run/secrets:ro" \
             -e BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token \
             -e MCP_PROXY_ALLOW_UNAUTHENTICATED=true \
             -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser \
@@ -164,7 +165,7 @@ jobs:
 
           printf '%s\n' 'dummy-incoming-api-key' > "$tmpdir/mcp_proxy_api_key"
           api_key_container_id="$(docker run -d \
-            -v "$tmpdir:/run/secrets:ro" \
+            -v "$tmpdir_abs:/run/secrets:ro" \
             -e BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token \
             -e MCP_PROXY_API_KEY_FILE=/run/secrets/mcp_proxy_api_key \
             -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser \
