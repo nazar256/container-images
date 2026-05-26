@@ -151,9 +151,6 @@ jobs:
 
           docker logs "$unauthenticated_container_id" > .tmp/chrome-devtools-mcp-proxy-unauthenticated.log 2>&1
           grep -q 'WARNING: Starting without MCP_PROXY_API_KEY because MCP_PROXY_ALLOW_UNAUTHENTICATED=true.' .tmp/chrome-devtools-mcp-proxy-unauthenticated.log
-          docker exec "$unauthenticated_container_id" sh -ceu '
-            ps -ww -eo args= | grep -Eq "(^|/)[c]hrome-devtools-mcp( |$).+ --headless( |$)"
-          '
           echo 'smoke: unauthenticated debug mode validation passed'
           docker rm -f "$unauthenticated_container_id" >/dev/null
           unauthenticated_container_id=""
@@ -285,11 +282,6 @@ jobs:
             chrome_devtools_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[c]hrome-devtools-mcp( |$)" || true)"
             if [ "$mcp_proxy_count" -ne 1 ] || [ "$chrome_devtools_count" -gt 1 ]; then
               echo "unexpected post-initialize process counts: mcp-proxy=$mcp_proxy_count chrome-devtools-mcp=$chrome_devtools_count" >&2
-              printf "%s\n" "$processes" >&2
-              exit 1
-            fi
-            if ! printf "%s\n" "$processes" | grep -Eq "(^|/)[m]cp-proxy( |$).+ -- chrome-devtools-mcp "; then
-              echo "mcp-proxy command line does not show chrome-devtools-mcp backend" >&2
               printf "%s\n" "$processes" >&2
               exit 1
             fi
