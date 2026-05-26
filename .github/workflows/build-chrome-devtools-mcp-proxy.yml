@@ -112,14 +112,21 @@ jobs:
           fi
           grep -q 'CHROME_DEVTOOLS_MCP_EXTRA_ARGS may not override required browser connection or telemetry flags: --browserUrl=http://override' .tmp/chrome-devtools-mcp-proxy-forbidden-browserUrl.log
 
+          unauthenticated_container_id=""
+          container_id=""
+          api_key_container_id=""
+
+          cleanup() {
+            docker rm -f "$unauthenticated_container_id" "$container_id" "$api_key_container_id" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
           unauthenticated_container_id="$(docker run -d \
             -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token \
             -e MCP_PROXY_ALLOW_UNAUTHENTICATED=true \
             -e CHROME_DEVTOOLS_MCP_EXTRA_ARGS='["--headless"]' \
             -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser \
             local/chrome-devtools-mcp-proxy:smoke)"
-
-          trap 'docker rm -f "$unauthenticated_container_id" "$container_id" "$api_key_container_id" >/dev/null 2>&1 || true' EXIT
 
           docker exec "$unauthenticated_container_id" sh -ceu '
             for i in $(seq 1 50); do
@@ -135,7 +142,7 @@ jobs:
             ps -eo args= | grep -Eq "(^|/)chrome-devtools-mcp( |$).+ --headless( |$)"
           '
           docker rm -f "$unauthenticated_container_id" >/dev/null
-          unset unauthenticated_container_id
+          unauthenticated_container_id=""
 
           mkdir -p .tmp/chrome-devtools-mcp-proxy-smoke
           tmpdir=".tmp/chrome-devtools-mcp-proxy-smoke"
