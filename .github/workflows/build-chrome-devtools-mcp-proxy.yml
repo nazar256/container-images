@@ -1,0 +1,132 @@
+name: build chrome-devtools-mcp-proxy
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - images/chrome-devtools-mcp-proxy/**
+      - .github/workflows/build-chrome-devtools-mcp-proxy.yml
+      - .github/workflows/_reusable-build-and-push.yml
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    outputs:
+      mcp_proxy_version: ${{ steps.resolve.outputs.mcp_proxy_version }}
+      chrome_devtools_mcp_version: ${{ steps.resolve.outputs.chrome_devtools_mcp_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve build args
+        id: resolve
+        run: |
+          mcp_proxy_version="6.5.1"
+          chrome_devtools_mcp_version="1.0.1"
+          echo "mcp_proxy_version=${mcp_proxy_version}" >> "$GITHUB_OUTPUT"
+          echo "chrome_devtools_mcp_version=${chrome_devtools_mcp_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build smoke image
+        run: |
+          docker build \
+            -t local/chrome-devtools-mcp-proxy:smoke \
+            --build-arg MCP_PROXY_VERSION=${{ steps.resolve.outputs.mcp_proxy_version }} \
+            --build-arg CHROME_DEVTOOLS_MCP_VERSION=${{ steps.resolve.outputs.chrome_devtools_mcp_version }} \
+            -f images/chrome-devtools-mcp-proxy/Dockerfile \
+            images/chrome-devtools-mcp-proxy
+
+      - name: Smoke check binaries and entrypoint
+        run: |
+          docker run --rm --entrypoint sh local/chrome-devtools-mcp-proxy:smoke -ceu '
+            command -v node >/dev/null
+            command -v npm >/dev/null
+            command -v mcp-proxy >/dev/null
+            command -v chrome-devtools-mcp >/dev/null
+            test -x /usr/local/bin/docker-entrypoint.sh
+          '
+          docker run --rm --entrypoint mcp-proxy local/chrome-devtools-mcp-proxy:smoke --help >/dev/null
+          docker run --rm --entrypoint chrome-devtools-mcp local/chrome-devtools-mcp-proxy:smoke --help >/dev/null
+
+      - name: Smoke check entrypoint validation and runtime process model
+        run: |
+          mkdir -p .tmp
+
+          if docker run --rm local/chrome-devtools-mcp-proxy:smoke >.tmp/chrome-devtools-mcp-proxy-missing-token.log 2>&1; then
+            echo "expected missing-token startup failure" >&2
+            exit 1
+          fi
+          grep -q 'BROWSER_CDP_BEARER_TOKEN' .tmp/chrome-devtools-mcp-proxy-missing-token.log
+
+          mkdir -p .tmp/chrome-devtools-mcp-proxy-smoke
+          tmpdir=".tmp/chrome-devtools-mcp-proxy-smoke"
+          trap 'docker rm -f "$container_id" >/dev/null 2>&1 || true' EXIT
+          printf '%s\n' 'dummy-browser-cdp-token' > "$tmpdir/browser_cdp_token"
+
+          container_id="$(docker run -d \
+            -v "$tmpdir:/run/secrets:ro" \
+            -e BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token \
+            -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser \
+            local/chrome-devtools-mcp-proxy:smoke)"
+
+          docker exec "$container_id" sh -ceu '
+            for i in $(seq 1 50); do
+              curl -fsS http://127.0.0.1:8000/ping >/dev/null 2>/dev/null && exit 0
+              sleep 0.2
+            done
+            exit 1
+          '
+
+          docker exec "$container_id" sh -ceu '
+            for i in $(seq 1 3); do
+              status="$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)"
+              test "$status" = 400
+            done
+            test "$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/sse || true)" = 404
+          '
+
+          printf '%s\n' 'dummy-incoming-api-key' > "$tmpdir/mcp_proxy_api_key"
+          api_key_container_id="$(docker run -d \
+            -v "$tmpdir:/run/secrets:ro" \
+            -e BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token \
+            -e MCP_PROXY_API_KEY_FILE=/run/secrets/mcp_proxy_api_key \
+            -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser \
+            local/chrome-devtools-mcp-proxy:smoke)"
+
+          trap 'docker rm -f "$container_id" "$api_key_container_id" >/dev/null 2>&1 || true' EXIT
+
+          docker exec "$api_key_container_id" sh -ceu '
+            for i in $(seq 1 50); do
+              curl -fsS http://127.0.0.1:8000/ping >/dev/null 2>/dev/null && exit 0
+              sleep 0.2
+            done
+            exit 1
+          '
+
+          docker exec "$api_key_container_id" sh -ceu '
+            test "$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)" = 401
+            test "$(curl -sS -H "X-API-Key: dummy-incoming-api-key" -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)" = 400
+          '
+
+          docker exec "$container_id" sh -ceu '
+            test "$(ps -eo args= | grep -Ec "(^|/)(mcp-proxy)( |$)")" -eq 1
+            test "$(ps -eo args= | grep -Ec "(^|/)(chrome-devtools-mcp)( |$)")" -eq 1
+            ps -eo args= | grep -Eq "(^|/)mcp-proxy( |$).+ -- chrome-devtools-mcp "
+          '
+
+  build:
+    needs: smoke
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_reusable-build-and-push.yml
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    with:
+      image_name: chrome-devtools-mcp-proxy
+      context: images/chrome-devtools-mcp-proxy
+      dockerfile: images/chrome-devtools-mcp-proxy/Dockerfile
+      build_args: |
+        MCP_PROXY_VERSION=${{ needs.smoke.outputs.mcp_proxy_version }}
+        CHROME_DEVTOOLS_MCP_VERSION=${{ needs.smoke.outputs.chrome_devtools_mcp_version }}

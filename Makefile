@@ -63,6 +63,28 @@ smoke-image: podman-check
 		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /usr/bin/chromium'; \
 		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'test -x /usr/bin/chromium-browser'; \
 		podman run --rm --entrypoint bash $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'source /custom-cont-init.d/40-openclaw-init; [[ "$${CHROME_CLI}" == *"--remote-debugging-address=127.0.0.1"* ]]; [[ "$${CHROME_CLI}" == *"--remote-debugging-port=$${CDP_PORT}"* ]]; [[ "$${CHROME_CLI}" == *"--user-data-dir=$${CHROMIUM_USER_DATA_DIR}"* ]]; [[ "$${OPENCLAW_BROWSER_CDP_URL}" == "http://127.0.0.1:$${CDP_PORT}" ]]'; \
+	elif [ "$(IMAGE)" = "chrome-devtools-mcp-proxy" ]; then \
+		podman run --rm --entrypoint sh $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'command -v node >/dev/null && command -v npm >/dev/null && command -v mcp-proxy >/dev/null && command -v chrome-devtools-mcp >/dev/null && test -x /usr/local/bin/docker-entrypoint.sh'; \
+		podman run --rm --entrypoint mcp-proxy $(LOCAL_TAG_PREFIX)$(IMAGE):test --help >/dev/null; \
+		podman run --rm --entrypoint chrome-devtools-mcp $(LOCAL_TAG_PREFIX)$(IMAGE):test --help >/dev/null; \
+		mkdir -p .tmp/chrome-devtools-mcp-proxy-smoke; \
+		if podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test >.tmp/chrome-devtools-mcp-proxy-smoke/missing-token.log 2>&1; then \
+			echo 'expected missing-token startup failure' >&2; \
+			exit 1; \
+		fi; \
+		grep -q 'BROWSER_CDP_BEARER_TOKEN' .tmp/chrome-devtools-mcp-proxy-smoke/missing-token.log; \
+		tmpdir=.tmp/chrome-devtools-mcp-proxy-smoke; \
+		printf '%s\n' 'dummy-browser-cdp-token' > "$${tmpdir}/browser_cdp_token"; \
+		ctr_id="$$(podman run -d -v "$${tmpdir}:/run/secrets:ro,Z" -e BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser $(LOCAL_TAG_PREFIX)$(IMAGE):test)"; \
+		podman exec "$${ctr_id}" sh -ceu 'for i in $$(seq 1 50); do curl -fsS http://127.0.0.1:8000/ping >/dev/null 2>/dev/null && exit 0; sleep 0.2; done; exit 1'; \
+		podman exec "$${ctr_id}" sh -ceu 'for i in $$(seq 1 3); do status="$$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)"; test "$${status}" = 400; done; test "$$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/sse || true)" = 404'; \
+		printf '%s\n' 'dummy-incoming-api-key' > "$${tmpdir}/mcp_proxy_api_key"; \
+		api_key_ctr_id="$$(podman run -d -v "$${tmpdir}:/run/secrets:ro,Z" -e BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token -e MCP_PROXY_API_KEY_FILE=/run/secrets/mcp_proxy_api_key -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser $(LOCAL_TAG_PREFIX)$(IMAGE):test)"; \
+		podman exec "$${api_key_ctr_id}" sh -ceu 'for i in $$(seq 1 50); do curl -fsS http://127.0.0.1:8000/ping >/dev/null 2>/dev/null && exit 0; sleep 0.2; done; exit 1'; \
+		podman exec "$${api_key_ctr_id}" sh -ceu 'test "$$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)" = 401; test "$$(curl -sS -H "X-API-Key: dummy-incoming-api-key" -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)" = 400'; \
+		podman exec "$${ctr_id}" sh -ceu 'test "$$(ps -eo args= | grep -Ec "(^|/)(mcp-proxy)( |$$)")" -eq 1; test "$$(ps -eo args= | grep -Ec "(^|/)(chrome-devtools-mcp)( |$$)")" -eq 1; ps -eo args= | grep -Eq "(^|/)mcp-proxy( |$$).+ -- chrome-devtools-mcp "'; \
+		podman rm -f "$${api_key_ctr_id}" >/dev/null; \
+		podman rm -f "$${ctr_id}" >/dev/null; \
 	elif [ "$(IMAGE)" = "devbox" ]; then \
 		podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'whoami | grep -qx dev'; \
 		podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'test "$$HOME" = /home/dev'; \
