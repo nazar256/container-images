@@ -103,7 +103,7 @@ smoke-image: podman-check
 		podman exec "$${unauth_ctr_id}" sh -ceu 'for i in $$(seq 1 50); do curl -fsS http://127.0.0.1:8000/ping >/dev/null 2>/dev/null && exit 0; sleep 0.2; done; exit 1'; \
 		podman logs "$${unauth_ctr_id}" > .tmp/chrome-devtools-mcp-proxy-smoke/unauthenticated.log 2>&1; \
 		grep -q 'WARNING: Starting without MCP_PROXY_API_KEY because MCP_PROXY_ALLOW_UNAUTHENTICATED=true.' .tmp/chrome-devtools-mcp-proxy-smoke/unauthenticated.log; \
-		podman exec "$${unauth_ctr_id}" sh -ceu 'ps -eo args= | grep -Eq "(^|/)chrome-devtools-mcp( |$$).+ --headless( |$$)"'; \
+		podman exec "$${unauth_ctr_id}" sh -ceu 'ps -eo args= | grep -Eq "(^|/)[c]hrome-devtools-mcp( |$$).+ --headless( |$$)"'; \
 		podman rm -f "$${unauth_ctr_id}" >/dev/null; \
 		tmpdir=.tmp/chrome-devtools-mcp-proxy-smoke; \
 		printf '%s\n' 'dummy-browser-cdp-token' > "$${tmpdir}/browser_cdp_token"; \
@@ -116,7 +116,7 @@ smoke-image: podman-check
 		podman exec "$${api_key_ctr_id}" sh -ceu 'test "$$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)" = 401; test "$$(curl -sS -H "X-API-Key: dummy-incoming-api-key" -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)" = 400'; \
 		podman cp .tmp/chrome-devtools-mcp-proxy-smoke/initialize.json "$${api_key_ctr_id}:/tmp/initialize.json"; \
 		podman exec "$${api_key_ctr_id}" sh -ceu 'curl -i -sS -X POST http://127.0.0.1:8000/mcp -H "X-API-Key: dummy-incoming-api-key" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" --data-binary @/tmp/initialize.json > /tmp/initialize-response.txt; grep -q "HTTP/1.1 200 OK" /tmp/initialize-response.txt; grep -qi "content-type: text/event-stream" /tmp/initialize-response.txt; grep -qi "mcp-session-id:" /tmp/initialize-response.txt; grep -q "\"jsonrpc\":\"2.0\"" /tmp/initialize-response.txt; grep -q "\"id\":1" /tmp/initialize-response.txt; grep -q "\"name\":\"chrome_devtools\"" /tmp/initialize-response.txt'; \
-		podman exec "$${api_key_ctr_id}" sh -ceu 'test "$$(ps -eo args= | grep -Ec "(^|/)(mcp-proxy)( |$$)")" -eq 1; test "$$(ps -eo args= | grep -Ec "(^|/)(chrome-devtools-mcp)( |$$)")" -eq 1; ps -eo args= | grep -Eq "(^|/)mcp-proxy( |$$).+ -- chrome-devtools-mcp "'; \
+		podman exec "$${api_key_ctr_id}" sh -ceu 'test "$$(ps -eo args= | grep -Ec "(^|/)[m]cp-proxy( |$$)")" -eq 1; test "$$(ps -eo args= | grep -Ec "(^|/)[c]hrome-devtools-mcp( |$$)")" -eq 1; ps -eo args= | grep -Eq "(^|/)[m]cp-proxy( |$$).+ -- chrome-devtools-mcp "'; \
 		podman rm -f "$${api_key_ctr_id}" >/dev/null; \
 		podman rm -f "$${ctr_id}" >/dev/null; \
 	elif [ "$(IMAGE)" = "devbox" ]; then \
