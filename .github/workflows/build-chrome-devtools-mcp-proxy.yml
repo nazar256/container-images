@@ -174,9 +174,16 @@ jobs:
           docker exec "$container_id" sh -ceu '
             for i in $(seq 1 3); do
               status="$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)"
-              test "$status" = 400
+              case "$status" in
+                400|405|406) ;;
+                *) echo "expected unauthenticated /mcp invalid request to return protocol error, got HTTP $status" >&2; exit 1 ;;
+              esac
             done
-            test "$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/sse || true)" = 404
+            sse_status="$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/sse || true)"
+            if [ "$sse_status" != 404 ]; then
+              echo "expected /sse disabled with HTTP 404, got HTTP $sse_status" >&2
+              exit 1
+            fi
           '
 
           printf '%s\n' 'dummy-incoming-api-key' > "$tmpdir/mcp_proxy_api_key"
@@ -196,8 +203,17 @@ jobs:
           '
 
           docker exec "$api_key_container_id" sh -ceu '
-            test "$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)" = 401
-            test "$(curl -sS -H "X-API-Key: dummy-incoming-api-key" -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)" = 400
+            unauth_status="$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)"
+            if [ "$unauth_status" != 401 ]; then
+              echo "expected /mcp without X-API-Key to return HTTP 401, got HTTP $unauth_status" >&2
+              exit 1
+            fi
+
+            auth_status="$(curl -sS -H "X-API-Key: dummy-incoming-api-key" -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)"
+            case "$auth_status" in
+              400|405|406) ;;
+              *) echo "expected /mcp with X-API-Key to pass auth and return protocol error, got HTTP $auth_status" >&2; exit 1 ;;
+            esac
           '
 
           docker exec "$api_key_container_id" sh -ceu '
