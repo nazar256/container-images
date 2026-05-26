@@ -68,21 +68,55 @@ smoke-image: podman-check
 		podman run --rm --entrypoint mcp-proxy $(LOCAL_TAG_PREFIX)$(IMAGE):test --help >/dev/null; \
 		podman run --rm --entrypoint chrome-devtools-mcp $(LOCAL_TAG_PREFIX)$(IMAGE):test --help >/dev/null; \
 		mkdir -p .tmp/chrome-devtools-mcp-proxy-smoke; \
+		printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"smoke-client","version":"1.0.0"}}}' > .tmp/chrome-devtools-mcp-proxy-smoke/initialize.json; \
 		if podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test >.tmp/chrome-devtools-mcp-proxy-smoke/missing-token.log 2>&1; then \
 			echo 'expected missing-token startup failure' >&2; \
 			exit 1; \
 		fi; \
 		grep -q 'BROWSER_CDP_BEARER_TOKEN' .tmp/chrome-devtools-mcp-proxy-smoke/missing-token.log; \
+		if podman run --rm -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token $(LOCAL_TAG_PREFIX)$(IMAGE):test >.tmp/chrome-devtools-mcp-proxy-smoke/missing-api-key.log 2>&1; then \
+			echo 'expected missing-api-key startup failure' >&2; \
+			exit 1; \
+		fi; \
+		grep -q 'MCP_PROXY_API_KEY' .tmp/chrome-devtools-mcp-proxy-smoke/missing-api-key.log; \
+		if podman run --rm -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token -e MCP_PROXY_API_KEY=dummy-incoming-api-key -e CHROME_DEVTOOLS_MCP_EXTRA_ARGS='not-json' $(LOCAL_TAG_PREFIX)$(IMAGE):test >.tmp/chrome-devtools-mcp-proxy-smoke/invalid-extra-args.log 2>&1; then \
+			echo 'expected invalid-extra-args startup failure' >&2; \
+			exit 1; \
+		fi; \
+		grep -q 'CHROME_DEVTOOLS_MCP_EXTRA_ARGS must be a JSON array of strings.' .tmp/chrome-devtools-mcp-proxy-smoke/invalid-extra-args.log; \
+		if podman run --rm -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token -e MCP_PROXY_API_KEY=dummy-incoming-api-key -e CHROME_DEVTOOLS_MCP_EXTRA_ARGS='["--wsEndpoint=ws://override"]' $(LOCAL_TAG_PREFIX)$(IMAGE):test >.tmp/chrome-devtools-mcp-proxy-smoke/forbidden-ws-endpoint.log 2>&1; then \
+			echo 'expected forbidden-ws-endpoint startup failure' >&2; \
+			exit 1; \
+		fi; \
+		grep -q 'CHROME_DEVTOOLS_MCP_EXTRA_ARGS may not override required browser connection or telemetry flags: --wsEndpoint=ws://override' .tmp/chrome-devtools-mcp-proxy-smoke/forbidden-ws-endpoint.log; \
+		if podman run --rm -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token -e MCP_PROXY_API_KEY=dummy-incoming-api-key -e CHROME_DEVTOOLS_MCP_EXTRA_ARGS='["--browser-url=http://override"]' $(LOCAL_TAG_PREFIX)$(IMAGE):test >.tmp/chrome-devtools-mcp-proxy-smoke/forbidden-browser-url.log 2>&1; then \
+			echo 'expected forbidden-browser-url startup failure' >&2; \
+			exit 1; \
+		fi; \
+		grep -q 'CHROME_DEVTOOLS_MCP_EXTRA_ARGS may not override required browser connection or telemetry flags: --browser-url=http://override' .tmp/chrome-devtools-mcp-proxy-smoke/forbidden-browser-url.log; \
+		if podman run --rm -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token -e MCP_PROXY_API_KEY=dummy-incoming-api-key -e CHROME_DEVTOOLS_MCP_EXTRA_ARGS='["--browserUrl=http://override"]' $(LOCAL_TAG_PREFIX)$(IMAGE):test >.tmp/chrome-devtools-mcp-proxy-smoke/forbidden-browserUrl.log 2>&1; then \
+			echo 'expected forbidden-browserUrl startup failure' >&2; \
+			exit 1; \
+		fi; \
+		grep -q 'CHROME_DEVTOOLS_MCP_EXTRA_ARGS may not override required browser connection or telemetry flags: --browserUrl=http://override' .tmp/chrome-devtools-mcp-proxy-smoke/forbidden-browserUrl.log; \
+		unauth_ctr_id="$$(podman run -d -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token -e MCP_PROXY_ALLOW_UNAUTHENTICATED=true -e CHROME_DEVTOOLS_MCP_EXTRA_ARGS='["--headless"]' -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser $(LOCAL_TAG_PREFIX)$(IMAGE):test)"; \
+		podman exec "$${unauth_ctr_id}" sh -ceu 'for i in $$(seq 1 50); do curl -fsS http://127.0.0.1:8000/ping >/dev/null 2>/dev/null && exit 0; sleep 0.2; done; exit 1'; \
+		podman logs "$${unauth_ctr_id}" > .tmp/chrome-devtools-mcp-proxy-smoke/unauthenticated.log 2>&1; \
+		grep -q 'WARNING: Starting without MCP_PROXY_API_KEY because MCP_PROXY_ALLOW_UNAUTHENTICATED=true.' .tmp/chrome-devtools-mcp-proxy-smoke/unauthenticated.log; \
+		podman exec "$${unauth_ctr_id}" sh -ceu 'ps -eo args= | grep -Eq "(^|/)chrome-devtools-mcp( |$$).+ --headless( |$$)"'; \
+		podman rm -f "$${unauth_ctr_id}" >/dev/null; \
 		tmpdir=.tmp/chrome-devtools-mcp-proxy-smoke; \
 		printf '%s\n' 'dummy-browser-cdp-token' > "$${tmpdir}/browser_cdp_token"; \
-		ctr_id="$$(podman run -d -v "$${tmpdir}:/run/secrets:ro,Z" -e BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser $(LOCAL_TAG_PREFIX)$(IMAGE):test)"; \
+		ctr_id="$$(podman run -d -v "$${tmpdir}:/run/secrets:ro,Z" -e BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token -e MCP_PROXY_ALLOW_UNAUTHENTICATED=true -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser $(LOCAL_TAG_PREFIX)$(IMAGE):test)"; \
 		podman exec "$${ctr_id}" sh -ceu 'for i in $$(seq 1 50); do curl -fsS http://127.0.0.1:8000/ping >/dev/null 2>/dev/null && exit 0; sleep 0.2; done; exit 1'; \
 		podman exec "$${ctr_id}" sh -ceu 'for i in $$(seq 1 3); do status="$$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)"; test "$${status}" = 400; done; test "$$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/sse || true)" = 404'; \
 		printf '%s\n' 'dummy-incoming-api-key' > "$${tmpdir}/mcp_proxy_api_key"; \
 		api_key_ctr_id="$$(podman run -d -v "$${tmpdir}:/run/secrets:ro,Z" -e BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token -e MCP_PROXY_API_KEY_FILE=/run/secrets/mcp_proxy_api_key -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser $(LOCAL_TAG_PREFIX)$(IMAGE):test)"; \
 		podman exec "$${api_key_ctr_id}" sh -ceu 'for i in $$(seq 1 50); do curl -fsS http://127.0.0.1:8000/ping >/dev/null 2>/dev/null && exit 0; sleep 0.2; done; exit 1'; \
 		podman exec "$${api_key_ctr_id}" sh -ceu 'test "$$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)" = 401; test "$$(curl -sS -H "X-API-Key: dummy-incoming-api-key" -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)" = 400'; \
-		podman exec "$${ctr_id}" sh -ceu 'test "$$(ps -eo args= | grep -Ec "(^|/)(mcp-proxy)( |$$)")" -eq 1; test "$$(ps -eo args= | grep -Ec "(^|/)(chrome-devtools-mcp)( |$$)")" -eq 1; ps -eo args= | grep -Eq "(^|/)mcp-proxy( |$$).+ -- chrome-devtools-mcp "'; \
+		podman cp .tmp/chrome-devtools-mcp-proxy-smoke/initialize.json "$${api_key_ctr_id}:/tmp/initialize.json"; \
+		podman exec "$${api_key_ctr_id}" sh -ceu 'curl -i -sS -X POST http://127.0.0.1:8000/mcp -H "X-API-Key: dummy-incoming-api-key" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" --data-binary @/tmp/initialize.json > /tmp/initialize-response.txt; grep -q "HTTP/1.1 200 OK" /tmp/initialize-response.txt; grep -qi "content-type: text/event-stream" /tmp/initialize-response.txt; grep -qi "mcp-session-id:" /tmp/initialize-response.txt; grep -q "\"jsonrpc\":\"2.0\"" /tmp/initialize-response.txt; grep -q "\"id\":1" /tmp/initialize-response.txt; grep -q "\"name\":\"chrome_devtools\"" /tmp/initialize-response.txt'; \
+		podman exec "$${api_key_ctr_id}" sh -ceu 'test "$$(ps -eo args= | grep -Ec "(^|/)(mcp-proxy)( |$$)")" -eq 1; test "$$(ps -eo args= | grep -Ec "(^|/)(chrome-devtools-mcp)( |$$)")" -eq 1; ps -eo args= | grep -Eq "(^|/)mcp-proxy( |$$).+ -- chrome-devtools-mcp "'; \
 		podman rm -f "$${api_key_ctr_id}" >/dev/null; \
 		podman rm -f "$${ctr_id}" >/dev/null; \
 	elif [ "$(IMAGE)" = "devbox" ]; then \

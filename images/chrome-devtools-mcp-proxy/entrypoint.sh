@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+warn() {
+  printf 'WARNING: %s\n' "$1" >&2
+}
+
+die() {
+  printf '%s\n' "$1" >&2
+  exit 1
+}
+
 load_secret_prefer_file() {
   local var_name="$1"
   local file_var_name="${var_name}_FILE"
@@ -8,8 +17,7 @@ load_secret_prefer_file() {
 
   if [[ -n "$file_path" ]]; then
     if [[ ! -f "$file_path" ]]; then
-      printf 'Secret file not found: %s\n' "$file_path" >&2
-      exit 1
+      die "Secret file not found: $file_path"
     fi
 
     tr -d '\r\n' < "$file_path"
@@ -22,6 +30,7 @@ load_secret_prefer_file() {
 parse_extra_args() {
   node <<'EOF'
 const raw = process.env.CHROME_DEVTOOLS_MCP_EXTRA_ARGS;
+const separator = "\u001e";
 
 if (!raw) {
   process.exit(0);
@@ -63,10 +72,9 @@ for (const arg of parsed) {
     console.error(`CHROME_DEVTOOLS_MCP_EXTRA_ARGS may not override required browser connection or telemetry flags: ${arg}`);
     process.exit(1);
   }
-
-  process.stdout.write(arg);
-  process.stdout.write("\0");
 }
+
+process.stdout.write(parsed.join(separator));
 EOF
 }
 
@@ -79,21 +87,21 @@ main() {
   local browser_cdp_ws_endpoint="${BROWSER_CDP_WS_ENDPOINT:-ws://openclaw-browser-node:9223/devtools/browser}"
   local browser_cdp_bearer_token
   local mcp_proxy_api_key
+  local mcp_proxy_allow_unauthenticated="${MCP_PROXY_ALLOW_UNAUTHENTICATED:-}"
+  local serialized_extra_args
   local ws_headers_json
   local -a proxy_args
   local -a chrome_devtools_args
   local -a extra_args=()
 
   if [[ "$mcp_proxy_stream_endpoint" != /* ]]; then
-    printf 'MCP_PROXY_STREAM_ENDPOINT must start with /. Received: %s\n' "$mcp_proxy_stream_endpoint" >&2
-    exit 1
+    die "MCP_PROXY_STREAM_ENDPOINT must start with /. Received: $mcp_proxy_stream_endpoint"
   fi
 
   browser_cdp_bearer_token="$(load_secret_prefer_file BROWSER_CDP_BEARER_TOKEN)"
 
   if [[ -z "$browser_cdp_bearer_token" ]]; then
-    printf 'BROWSER_CDP_BEARER_TOKEN or BROWSER_CDP_BEARER_TOKEN_FILE is required.\n' >&2
-    exit 1
+    die 'BROWSER_CDP_BEARER_TOKEN or BROWSER_CDP_BEARER_TOKEN_FILE is required.'
   fi
 
   ws_headers_json="$({ BROWSER_CDP_BEARER_TOKEN_VALUE="$browser_cdp_bearer_token" node <<'EOF'
@@ -108,15 +116,23 @@ EOF
   mcp_proxy_api_key="$(load_secret_prefer_file MCP_PROXY_API_KEY)"
   if [[ -n "$mcp_proxy_api_key" ]]; then
     export MCP_PROXY_API_KEY="$mcp_proxy_api_key"
+  elif [[ "$mcp_proxy_allow_unauthenticated" == 'true' ]]; then
+    unset MCP_PROXY_API_KEY || true
+    warn 'Starting without MCP_PROXY_API_KEY because MCP_PROXY_ALLOW_UNAUTHENTICATED=true. This is for local/debug use only.'
   else
     unset MCP_PROXY_API_KEY || true
+    die 'MCP_PROXY_API_KEY or MCP_PROXY_API_KEY_FILE is required unless MCP_PROXY_ALLOW_UNAUTHENTICATED=true.'
   fi
   unset MCP_PROXY_API_KEY_FILE
 
   if [[ -n "${CHROME_DEVTOOLS_MCP_EXTRA_ARGS:-}" ]]; then
-    while IFS= read -r -d '' arg; do
-      extra_args+=("$arg")
-    done < <(parse_extra_args)
+    if ! serialized_extra_args="$(parse_extra_args)"; then
+      exit 1
+    fi
+
+    if [[ -n "$serialized_extra_args" ]]; then
+      IFS=$'\036' read -r -a extra_args <<< "$serialized_extra_args"
+    fi
   fi
 
   proxy_args=(

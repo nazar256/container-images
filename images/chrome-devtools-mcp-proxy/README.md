@@ -14,6 +14,8 @@ MetaMCP -> chrome-devtools-mcp-proxy /mcp -> chrome-devtools-mcp -> OpenClaw bro
 
 The image configures `mcp-proxy` in stream-only mode without `--stateless`, so the exposed MCP transport is Streamable HTTP on `/mcp` while the backend stdio process stays long-lived.
 
+Incoming `mcp-proxy` API-key authentication is required by default. Startup fails closed unless `MCP_PROXY_API_KEY` or `MCP_PROXY_API_KEY_FILE` is set, or you explicitly opt into local/debug unauthenticated mode with `MCP_PROXY_ALLOW_UNAUTHENTICATED=true`.
+
 ## Build locally
 
 ```bash
@@ -46,6 +48,14 @@ if docker run --rm chrome-devtools-mcp-proxy:local >.tmp/chrome-devtools-mcp-pro
   exit 1
 fi
 grep -q 'BROWSER_CDP_BEARER_TOKEN' .tmp/chrome-devtools-mcp-proxy-missing-token.log
+
+if docker run --rm \
+  -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token \
+  chrome-devtools-mcp-proxy:local >.tmp/chrome-devtools-mcp-proxy-missing-api-key.log 2>&1; then
+  echo 'expected missing-api-key startup failure' >&2
+  exit 1
+fi
+grep -q 'MCP_PROXY_API_KEY' .tmp/chrome-devtools-mcp-proxy-missing-api-key.log
 ```
 
 ## Run locally
@@ -73,8 +83,9 @@ The service listens on `0.0.0.0:8000` and exposes only the Streamable HTTP MCP e
 | `MCP_PROXY_HOST` | `0.0.0.0` | Listen host for `mcp-proxy`. |
 | `MCP_PROXY_PORT` | `8000` | Listen port for `mcp-proxy`. |
 | `MCP_PROXY_STREAM_ENDPOINT` | `/mcp` | Streamable HTTP endpoint path. Must start with `/`. |
-| `MCP_PROXY_API_KEY` | unset | Optional incoming API key for `mcp-proxy`. Sent by clients as `X-API-Key`. |
+| `MCP_PROXY_API_KEY` | unset | Required incoming API key for `mcp-proxy` unless `MCP_PROXY_ALLOW_UNAUTHENTICATED=true`. Sent by clients as `X-API-Key`. |
 | `MCP_PROXY_API_KEY_FILE` | unset | Preferred Docker-secret file for `MCP_PROXY_API_KEY`. If both are set, file wins. |
+| `MCP_PROXY_ALLOW_UNAUTHENTICATED` | unset | Local/debug-only escape hatch. Only the exact value `true` allows startup without an incoming API key, and the container logs a warning when used. |
 | `MCP_PROXY_REQUEST_TIMEOUT_MS` | `300000` | `mcp-proxy --requestTimeout`. |
 | `MCP_PROXY_CONNECTION_TIMEOUT_MS` | `60000` | `mcp-proxy --connectionTimeout`. |
 | `BROWSER_CDP_WS_ENDPOINT` | `ws://openclaw-browser-node:9223/devtools/browser` | Required `chrome-devtools-mcp --wsEndpoint` target. |
@@ -100,11 +111,13 @@ docker run -d \
   --name chrome-devtools-mcp-proxy \
   --network internal-mcp \
   -e BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token \
+  -e MCP_PROXY_API_KEY_FILE=/run/secrets/metamcp_mcp_proxy_api_key \
   -v /run/secrets/browser_cdp_token:/run/secrets/browser_cdp_token:ro \
+  -v /run/secrets/metamcp_mcp_proxy_api_key:/run/secrets/metamcp_mcp_proxy_api_key:ro \
   ghcr.io/nazar256/chrome-devtools-mcp-proxy:latest
 ```
 
-Optional incoming API key via Docker secret file:
+Required incoming API key via Docker secret file:
 
 ```bash
 docker run -d \
@@ -123,10 +136,10 @@ docker run -d \
 type: STREAMABLE_HTTP
 url: http://chrome-devtools-mcp-proxy:8000/mcp
 headers:
-  X-API-Key: <optional-api-key>
+  X-API-Key: <required-api-key>
 ```
 
-If incoming API key auth is disabled, omit the `headers` block.
+Unauthenticated startup is disabled by default. For local debugging only, you may set `MCP_PROXY_ALLOW_UNAUTHENTICATED=true`, but production deployments should always send `X-API-Key`.
 
 ## Browser CDP config shape
 
@@ -142,7 +155,22 @@ BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token
 - Do not use raw Chromium CDP.
 - Do not use unauthenticated `--browser-url`.
 - Keep this service on private Docker networking with MetaMCP and the browser node.
+- Do not rely on private Docker networking as the only auth boundary; keep incoming `mcp-proxy` API-key auth enabled.
 - `chrome-devtools-mcp` only accepts `--wsHeaders` as a CLI argument, so the browser bearer token is visible in the backend process arguments inside the container. Restrict container access accordingly.
+
+Local/debug-only unauthenticated startup example:
+
+```bash
+docker run -d \
+  --name chrome-devtools-mcp-proxy \
+  --network internal-mcp \
+  -e MCP_PROXY_ALLOW_UNAUTHENTICATED=true \
+  -e BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token \
+  -v /run/secrets/browser_cdp_token:/run/secrets/browser_cdp_token:ro \
+  ghcr.io/nazar256/chrome-devtools-mcp-proxy:latest
+```
+
+This mode intentionally logs a warning and should not be used for shared or production networks.
 
 ## Operational notes
 

@@ -52,20 +52,97 @@ jobs:
         run: |
           mkdir -p .tmp
 
+          cat > .tmp/chrome-devtools-mcp-proxy-initialize.json <<'EOF'
+          {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"smoke-client","version":"1.0.0"}}}
+          EOF
+
           if docker run --rm local/chrome-devtools-mcp-proxy:smoke >.tmp/chrome-devtools-mcp-proxy-missing-token.log 2>&1; then
             echo "expected missing-token startup failure" >&2
             exit 1
           fi
           grep -q 'BROWSER_CDP_BEARER_TOKEN' .tmp/chrome-devtools-mcp-proxy-missing-token.log
 
+          if docker run --rm \
+            -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token \
+            local/chrome-devtools-mcp-proxy:smoke >.tmp/chrome-devtools-mcp-proxy-missing-api-key.log 2>&1; then
+            echo "expected missing-api-key startup failure" >&2
+            exit 1
+          fi
+          grep -q 'MCP_PROXY_API_KEY' .tmp/chrome-devtools-mcp-proxy-missing-api-key.log
+
+          if docker run --rm \
+            -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token \
+            -e MCP_PROXY_API_KEY=dummy-incoming-api-key \
+            -e CHROME_DEVTOOLS_MCP_EXTRA_ARGS='not-json' \
+            local/chrome-devtools-mcp-proxy:smoke >.tmp/chrome-devtools-mcp-proxy-invalid-extra-args.log 2>&1; then
+            echo "expected invalid-extra-args startup failure" >&2
+            exit 1
+          fi
+          grep -q 'CHROME_DEVTOOLS_MCP_EXTRA_ARGS must be a JSON array of strings.' .tmp/chrome-devtools-mcp-proxy-invalid-extra-args.log
+
+          if docker run --rm \
+            -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token \
+            -e MCP_PROXY_API_KEY=dummy-incoming-api-key \
+            -e CHROME_DEVTOOLS_MCP_EXTRA_ARGS='["--wsEndpoint=ws://override"]' \
+            local/chrome-devtools-mcp-proxy:smoke >.tmp/chrome-devtools-mcp-proxy-forbidden-ws-endpoint.log 2>&1; then
+            echo "expected forbidden-ws-endpoint startup failure" >&2
+            exit 1
+          fi
+          grep -q 'CHROME_DEVTOOLS_MCP_EXTRA_ARGS may not override required browser connection or telemetry flags: --wsEndpoint=ws://override' .tmp/chrome-devtools-mcp-proxy-forbidden-ws-endpoint.log
+
+          if docker run --rm \
+            -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token \
+            -e MCP_PROXY_API_KEY=dummy-incoming-api-key \
+            -e CHROME_DEVTOOLS_MCP_EXTRA_ARGS='["--browser-url=http://override"]' \
+            local/chrome-devtools-mcp-proxy:smoke >.tmp/chrome-devtools-mcp-proxy-forbidden-browser-url.log 2>&1; then
+            echo "expected forbidden-browser-url startup failure" >&2
+            exit 1
+          fi
+          grep -q 'CHROME_DEVTOOLS_MCP_EXTRA_ARGS may not override required browser connection or telemetry flags: --browser-url=http://override' .tmp/chrome-devtools-mcp-proxy-forbidden-browser-url.log
+
+          if docker run --rm \
+            -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token \
+            -e MCP_PROXY_API_KEY=dummy-incoming-api-key \
+            -e CHROME_DEVTOOLS_MCP_EXTRA_ARGS='["--browserUrl=http://override"]' \
+            local/chrome-devtools-mcp-proxy:smoke >.tmp/chrome-devtools-mcp-proxy-forbidden-browserUrl.log 2>&1; then
+            echo "expected forbidden-browserUrl startup failure" >&2
+            exit 1
+          fi
+          grep -q 'CHROME_DEVTOOLS_MCP_EXTRA_ARGS may not override required browser connection or telemetry flags: --browserUrl=http://override' .tmp/chrome-devtools-mcp-proxy-forbidden-browserUrl.log
+
+          unauthenticated_container_id="$(docker run -d \
+            -e BROWSER_CDP_BEARER_TOKEN=dummy-browser-cdp-token \
+            -e MCP_PROXY_ALLOW_UNAUTHENTICATED=true \
+            -e CHROME_DEVTOOLS_MCP_EXTRA_ARGS='["--headless"]' \
+            -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser \
+            local/chrome-devtools-mcp-proxy:smoke)"
+
+          trap 'docker rm -f "$unauthenticated_container_id" "$container_id" "$api_key_container_id" >/dev/null 2>&1 || true' EXIT
+
+          docker exec "$unauthenticated_container_id" sh -ceu '
+            for i in $(seq 1 50); do
+              curl -fsS http://127.0.0.1:8000/ping >/dev/null 2>/dev/null && exit 0
+              sleep 0.2
+            done
+            exit 1
+          '
+
+          docker logs "$unauthenticated_container_id" > .tmp/chrome-devtools-mcp-proxy-unauthenticated.log 2>&1
+          grep -q 'WARNING: Starting without MCP_PROXY_API_KEY because MCP_PROXY_ALLOW_UNAUTHENTICATED=true.' .tmp/chrome-devtools-mcp-proxy-unauthenticated.log
+          docker exec "$unauthenticated_container_id" sh -ceu '
+            ps -eo args= | grep -Eq "(^|/)chrome-devtools-mcp( |$).+ --headless( |$)"
+          '
+          docker rm -f "$unauthenticated_container_id" >/dev/null
+          unset unauthenticated_container_id
+
           mkdir -p .tmp/chrome-devtools-mcp-proxy-smoke
           tmpdir=".tmp/chrome-devtools-mcp-proxy-smoke"
-          trap 'docker rm -f "$container_id" >/dev/null 2>&1 || true' EXIT
           printf '%s\n' 'dummy-browser-cdp-token' > "$tmpdir/browser_cdp_token"
 
           container_id="$(docker run -d \
             -v "$tmpdir:/run/secrets:ro" \
             -e BROWSER_CDP_BEARER_TOKEN_FILE=/run/secrets/browser_cdp_token \
+            -e MCP_PROXY_ALLOW_UNAUTHENTICATED=true \
             -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser \
             local/chrome-devtools-mcp-proxy:smoke)"
 
@@ -93,8 +170,6 @@ jobs:
             -e BROWSER_CDP_WS_ENDPOINT=ws://127.0.0.1:9/devtools/browser \
             local/chrome-devtools-mcp-proxy:smoke)"
 
-          trap 'docker rm -f "$container_id" "$api_key_container_id" >/dev/null 2>&1 || true' EXIT
-
           docker exec "$api_key_container_id" sh -ceu '
             for i in $(seq 1 50); do
               curl -fsS http://127.0.0.1:8000/ping >/dev/null 2>/dev/null && exit 0
@@ -108,7 +183,23 @@ jobs:
             test "$(curl -sS -H "X-API-Key: dummy-incoming-api-key" -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp || true)" = 400
           '
 
-          docker exec "$container_id" sh -ceu '
+          docker cp .tmp/chrome-devtools-mcp-proxy-initialize.json "$api_key_container_id:/tmp/initialize.json"
+          docker exec "$api_key_container_id" sh -ceu '
+            curl -i -sS -X POST http://127.0.0.1:8000/mcp \
+              -H "X-API-Key: dummy-incoming-api-key" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json, text/event-stream" \
+              --data-binary @/tmp/initialize.json \
+              > /tmp/initialize-response.txt
+            grep -q "HTTP/1.1 200 OK" /tmp/initialize-response.txt
+            grep -qi "content-type: text/event-stream" /tmp/initialize-response.txt
+            grep -qi "mcp-session-id:" /tmp/initialize-response.txt
+            grep -q "\"jsonrpc\":\"2.0\"" /tmp/initialize-response.txt
+            grep -q "\"id\":1" /tmp/initialize-response.txt
+            grep -q "\"name\":\"chrome_devtools\"" /tmp/initialize-response.txt
+          '
+
+          docker exec "$api_key_container_id" sh -ceu '
             test "$(ps -eo args= | grep -Ec "(^|/)(mcp-proxy)( |$)")" -eq 1
             test "$(ps -eo args= | grep -Ec "(^|/)(chrome-devtools-mcp)( |$)")" -eq 1
             ps -eo args= | grep -Eq "(^|/)mcp-proxy( |$).+ -- chrome-devtools-mcp "
