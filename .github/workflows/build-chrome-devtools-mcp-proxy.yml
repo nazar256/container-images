@@ -8,10 +8,17 @@ on:
       - images/chrome-devtools-mcp-proxy/**
       - .github/workflows/build-chrome-devtools-mcp-proxy.yml
       - .github/workflows/_reusable-build-and-push.yml
+  pull_request:
+    paths:
+      - images/chrome-devtools-mcp-proxy/**
+      - .github/workflows/build-chrome-devtools-mcp-proxy.yml
+      - .github/workflows/_reusable-build-and-push.yml
+  workflow_dispatch:
 
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       mcp_proxy_version: ${{ steps.resolve.outputs.mcp_proxy_version }}
       chrome_devtools_mcp_version: ${{ steps.resolve.outputs.chrome_devtools_mcp_version }}
