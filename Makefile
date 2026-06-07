@@ -119,6 +119,24 @@ smoke-image: podman-check
 		podman exec "$${api_key_ctr_id}" sh -ceu 'processes="$$(ps -ww -eo args=)"; mcp_proxy_count="$$(printf "%s\n" "$${processes}" | grep -Ec "(^|/)[m]cp-proxy( |$$)" || true)"; chrome_devtools_count="$$(printf "%s\n" "$${processes}" | grep -Ec "(^|/)[c]hrome-devtools-mcp( |$$)" || true)"; if [ "$${mcp_proxy_count}" -ne 1 ] || [ "$${chrome_devtools_count}" -gt 1 ]; then echo "unexpected post-initialize process counts: mcp-proxy=$${mcp_proxy_count} chrome-devtools-mcp=$${chrome_devtools_count}" >&2; printf "%s\n" "$${processes}" >&2; exit 1; fi'; \
 		podman rm -f "$${api_key_ctr_id}" >/dev/null; \
 		podman rm -f "$${ctr_id}" >/dev/null; \
+	elif [ "$(IMAGE)" = "mcpproxy-chatgpt" ]; then \
+		podman run --rm --entrypoint bash $(LOCAL_TAG_PREFIX)$(IMAGE):test -ceu 'command -v mcpproxy >/dev/null && command -v node >/dev/null && command -v npm >/dev/null && command -v npx >/dev/null && command -v python3 >/dev/null && command -v uv >/dev/null && command -v uvx >/dev/null && test -x /usr/local/bin/docker-entrypoint.sh && test -x /usr/local/lib/mcpproxy/wrappers/run-nextcloud-mcp'; \
+		podman run --rm --entrypoint mcpproxy $(LOCAL_TAG_PREFIX)$(IMAGE):test --version >/dev/null; \
+		podman run --rm --entrypoint uvx $(LOCAL_TAG_PREFIX)$(IMAGE):test --version >/dev/null; \
+		mkdir -p .tmp/mcpproxy-chatgpt-smoke; \
+		if podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test >.tmp/mcpproxy-chatgpt-smoke/missing-api-key.log 2>&1; then \
+			echo 'expected missing API key startup failure' >&2; \
+			exit 1; \
+		fi; \
+		grep -q 'MCPPROXY_API_KEY or MCPPROXY_API_KEY_FILE is required.' .tmp/mcpproxy-chatgpt-smoke/missing-api-key.log; \
+		printf '%s\n' 'dummy-admin-api-key' > .tmp/mcpproxy-chatgpt-smoke/admin_api_key; \
+		printf '%s\n' 'https://nextcloud.example.test' > .tmp/mcpproxy-chatgpt-smoke/nextcloud_url; \
+		printf '%s\n' 'dummy-password' > .tmp/mcpproxy-chatgpt-smoke/nextcloud_password; \
+		podman run --rm -v "$${PWD}/.tmp/mcpproxy-chatgpt-smoke:/run/secrets:ro,Z" --entrypoint /usr/local/lib/mcpproxy/wrappers/run-nextcloud-mcp -e NEXTCLOUD_URL_FILE=/run/secrets/nextcloud_url -e NEXTCLOUD_PASSWORD_FILE=/run/secrets/nextcloud_password -e NEXTCLOUD_MCP_COMMAND_JSON='["python3","-c","import os; assert os.environ[\"NEXTCLOUD_URL\"] == \"https://nextcloud.example.test\"; assert os.environ[\"NEXTCLOUD_PASSWORD\"] == \"dummy-password\""]' $(LOCAL_TAG_PREFIX)$(IMAGE):test; \
+		ctr_id="$$(podman run -d -v "$${PWD}/.tmp/mcpproxy-chatgpt-smoke:/run/secrets:ro,Z" -e MCPPROXY_API_KEY_FILE=/run/secrets/admin_api_key $(LOCAL_TAG_PREFIX)$(IMAGE):test)"; \
+		podman exec "$${ctr_id}" bash -ceu 'for i in $$(seq 1 50); do curl -fsS http://127.0.0.1:8080/api/v1/status -H "X-API-Key: dummy-admin-api-key" >/dev/null 2>/dev/null && exit 0; sleep 0.2; done; exit 1'; \
+		podman exec "$${ctr_id}" bash -ceu 'unauth_status="$$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/mcp/call || true)"; if [ "$${unauth_status}" != "401" ]; then echo "expected /mcp/call without auth to return HTTP 401, got HTTP $${unauth_status}" >&2; exit 1; fi; processes="$$(ps -ww -eo args=)"; mcpproxy_count="$$(printf "%s\n" "$${processes}" | grep -Ec "(^|/)[m]cpproxy( |$$)" || true)"; if [ "$${mcpproxy_count}" -ne 1 ]; then echo "unexpected mcpproxy process count: $${mcpproxy_count}" >&2; printf "%s\n" "$${processes}" >&2; exit 1; fi'; \
+		podman rm -f "$${ctr_id}" >/dev/null; \
 	elif [ "$(IMAGE)" = "devbox" ]; then \
 		podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'whoami | grep -qx dev'; \
 		podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test bash -lc 'test "$$HOME" = /home/dev'; \

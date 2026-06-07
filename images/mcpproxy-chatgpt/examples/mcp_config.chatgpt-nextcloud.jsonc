@@ -1,0 +1,28 @@
+{
+  "listen": "0.0.0.0:8080",
+  "data_dir": "/var/lib/mcpproxy",
+  "require_mcp_auth": true,
+  "enable_socket": false,
+  "enable_code_execution": false,
+  "routing_mode": "retrieve_tools",
+  "tool_response_session_risk_warning": false,
+  "mcpServers": [
+    {
+      "name": "nextcloud",
+      "command": "/usr/local/lib/mcpproxy/wrappers/run-nextcloud-mcp",
+      "args": [],
+      "protocol": "stdio",
+      "enabled": true,
+      "skip_quarantine": false
+    },
+    {
+      "name": "chrome",
+      "url": "http://chrome-devtools-mcp-proxy:8000/mcp",
+      "protocol": "http",
+      "enabled": false,
+      "headers": {
+        "X-API-Key": "replace-with-internal-browser-proxy-api-key-or-set-through-private-ui"
+      }
+    }
+  ]
+}

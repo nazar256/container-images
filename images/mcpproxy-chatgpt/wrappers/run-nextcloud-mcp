@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+read_secret_file() {
+  local value_var="$1"
+  local file_var="$2"
+  local file_path="${!file_var:-}"
+
+  if [ -n "$file_path" ]; then
+    if [ ! -r "$file_path" ]; then
+      echo "${file_var} points to an unreadable file: ${file_path}" >&2
+      exit 1
+    fi
+    export "${value_var}=$(tr -d '\r\n' < "$file_path")"
+  fi
+}
+
+read_secret_file NEXTCLOUD_URL NEXTCLOUD_URL_FILE
+read_secret_file NEXTCLOUD_USERNAME NEXTCLOUD_USERNAME_FILE
+read_secret_file NEXTCLOUD_PASSWORD NEXTCLOUD_PASSWORD_FILE
+read_secret_file NEXTCLOUD_TOKEN NEXTCLOUD_TOKEN_FILE
+
+if [ -z "${NEXTCLOUD_MCP_COMMAND_JSON:-}" ]; then
+  echo "NEXTCLOUD_MCP_COMMAND_JSON is required and must be a JSON array of command strings." >&2
+  echo "Example: [\"npx\",\"-y\",\"<actual-nextcloud-mcp-package>\"]" >&2
+  exit 1
+fi
+
+mapfile -t command_args < <(python3 - <<'PY'
+import json
+import os
+import sys
+
+raw = os.environ.get("NEXTCLOUD_MCP_COMMAND_JSON", "")
+try:
+    value = json.loads(raw)
+except json.JSONDecodeError as exc:
+    print(f"NEXTCLOUD_MCP_COMMAND_JSON is invalid JSON: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+if not isinstance(value, list) or not value or not all(isinstance(item, str) and item for item in value):
+    print("NEXTCLOUD_MCP_COMMAND_JSON must be a non-empty JSON array of non-empty strings.", file=sys.stderr)
+    sys.exit(1)
+
+for item in value:
+    print(item)
+PY
+)
+
+exec "${command_args[@]}"

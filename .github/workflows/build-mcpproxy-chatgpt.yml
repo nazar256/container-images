@@ -1,0 +1,132 @@
+name: build mcpproxy-chatgpt
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - images/mcpproxy-chatgpt/**
+      - .github/workflows/build-mcpproxy-chatgpt.yml
+      - .github/workflows/_reusable-build-and-push.yml
+  pull_request:
+    paths:
+      - images/mcpproxy-chatgpt/**
+      - .github/workflows/build-mcpproxy-chatgpt.yml
+      - .github/workflows/_reusable-build-and-push.yml
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      mcpproxy_version: ${{ steps.resolve.outputs.mcpproxy_version }}
+      uv_version: ${{ steps.resolve.outputs.uv_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve build args
+        id: resolve
+        run: |
+          mcpproxy_version="0.33.5"
+          uv_version="0.7.13"
+          echo "mcpproxy_version=${mcpproxy_version}" >> "$GITHUB_OUTPUT"
+          echo "uv_version=${uv_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build smoke image
+        run: |
+          docker build \
+            -t local/mcpproxy-chatgpt:smoke \
+            --build-arg MCPPROXY_VERSION=${{ steps.resolve.outputs.mcpproxy_version }} \
+            --build-arg UV_VERSION=${{ steps.resolve.outputs.uv_version }} \
+            -f images/mcpproxy-chatgpt/Dockerfile \
+            images/mcpproxy-chatgpt
+
+      - name: Smoke check binaries and wrappers
+        run: |
+          docker run --rm --entrypoint bash local/mcpproxy-chatgpt:smoke -ceu '
+            command -v mcpproxy >/dev/null
+            command -v node >/dev/null
+            command -v npm >/dev/null
+            command -v npx >/dev/null
+            command -v python3 >/dev/null
+            command -v uv >/dev/null
+            command -v uvx >/dev/null
+            test -x /usr/local/bin/docker-entrypoint.sh
+            test -x /usr/local/lib/mcpproxy/wrappers/run-nextcloud-mcp
+          '
+          docker run --rm --entrypoint mcpproxy local/mcpproxy-chatgpt:smoke --version >/dev/null
+          docker run --rm --entrypoint uvx local/mcpproxy-chatgpt:smoke --version >/dev/null
+
+      - name: Smoke check entrypoint and Nextcloud wrapper
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp/mcpproxy-chatgpt-smoke
+
+          if docker run --rm local/mcpproxy-chatgpt:smoke >.tmp/mcpproxy-chatgpt-smoke/missing-api-key.log 2>&1; then
+            echo "expected missing API key startup failure" >&2
+            exit 1
+          fi
+          grep -q 'MCPPROXY_API_KEY or MCPPROXY_API_KEY_FILE is required.' .tmp/mcpproxy-chatgpt-smoke/missing-api-key.log
+
+          printf '%s\n' 'dummy-admin-api-key' > .tmp/mcpproxy-chatgpt-smoke/admin_api_key
+          printf '%s\n' 'https://nextcloud.example.test' > .tmp/mcpproxy-chatgpt-smoke/nextcloud_url
+          printf '%s\n' 'dummy-password' > .tmp/mcpproxy-chatgpt-smoke/nextcloud_password
+
+          docker run --rm \
+            -v "$PWD/.tmp/mcpproxy-chatgpt-smoke:/run/secrets:ro" \
+            --entrypoint /usr/local/lib/mcpproxy/wrappers/run-nextcloud-mcp \
+            -e NEXTCLOUD_URL_FILE=/run/secrets/nextcloud_url \
+            -e NEXTCLOUD_PASSWORD_FILE=/run/secrets/nextcloud_password \
+            -e NEXTCLOUD_MCP_COMMAND_JSON='["python3","-c","import os; assert os.environ[\"NEXTCLOUD_URL\"] == \"https://nextcloud.example.test\"; assert os.environ[\"NEXTCLOUD_PASSWORD\"] == \"dummy-password\""]' \
+            local/mcpproxy-chatgpt:smoke
+
+          container_id=""
+          cleanup() { docker rm -f "$container_id" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          container_id="$(docker run -d \
+            -v "$PWD/.tmp/mcpproxy-chatgpt-smoke:/run/secrets:ro" \
+            -e MCPPROXY_API_KEY_FILE=/run/secrets/admin_api_key \
+            local/mcpproxy-chatgpt:smoke)"
+
+          docker exec "$container_id" bash -ceu '
+            for i in $(seq 1 50); do
+              curl -fsS http://127.0.0.1:8080/api/v1/status -H "X-API-Key: dummy-admin-api-key" >/dev/null 2>/dev/null && exit 0
+              sleep 0.2
+            done
+            exit 1
+          '
+
+          docker exec "$container_id" bash -ceu '
+            unauth_status="$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/mcp/call || true)"
+            if [ "$unauth_status" != "401" ]; then
+              echo "expected /mcp/call without auth to return HTTP 401, got HTTP $unauth_status" >&2
+              exit 1
+            fi
+            processes="$(ps -ww -eo args=)"
+            mcpproxy_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[m]cpproxy( |$)" || true)"
+            if [ "$mcpproxy_count" -ne 1 ]; then
+              echo "unexpected mcpproxy process count: $mcpproxy_count" >&2
+              printf "%s\n" "$processes" >&2
+              exit 1
+            fi
+          '
+
+  build:
+    needs: smoke
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_reusable-build-and-push.yml
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    with:
+      image_name: mcpproxy-chatgpt
+      context: images/mcpproxy-chatgpt
+      dockerfile: images/mcpproxy-chatgpt/Dockerfile
+      build_args: |
+        MCPPROXY_VERSION=${{ needs.smoke.outputs.mcpproxy_version }}
+        UV_VERSION=${{ needs.smoke.outputs.uv_version }}
