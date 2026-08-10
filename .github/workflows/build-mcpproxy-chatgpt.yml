@@ -164,9 +164,9 @@ jobs:
             processes="$(ps -ww -eo args=)"
             # Match only the executable (the first argv token). The data-dir
             # argument also contains "/mcpproxy" and must not count as a process.
-            mcpproxy_count="$(printf "%s\n" "$processes" | grep -Ec '^([^ ]*/)?[m]cpproxy( |$)' || true)"
-            dbus_count="$(printf "%s\n" "$processes" | grep -Ec '^([^ ]*/)?[d]bus-daemon( |$)' || true)"
-            keyring_count="$(printf "%s\n" "$processes" | grep -Ec '^([^ ]*/)?[g]nome-keyring-daemon( |$)' || true)"
+            mcpproxy_count="$(printf "%s\n" "$processes" | grep -Ec "^([^ ]*/)?[m]cpproxy( |$)" || true)"
+            dbus_count="$(printf "%s\n" "$processes" | grep -Ec "^([^ ]*/)?[d]bus-daemon( |$)" || true)"
+            keyring_count="$(printf "%s\n" "$processes" | grep -Ec "^([^ ]*/)?[g]nome-keyring-daemon( |$)" || true)"
             if [ "$mcpproxy_count" -ne 1 ] || [ "$dbus_count" -ne 1 ] || [ "$keyring_count" -ne 1 ]; then
               echo "unexpected process counts: mcpproxy=$mcpproxy_count dbus=$dbus_count keyring=$keyring_count" >&2
               printf "%s\n" "$processes" >&2
