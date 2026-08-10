@@ -23,10 +23,29 @@ bool_value() {
   esac
 }
 
+run_with_keyring() {
+  if [ "$(bool_value "${MCPPROXY_DISABLE_KEYRING:-false}")" = true ]; then
+    exec "$@"
+  fi
+
+  local persistent_dir="${MCPPROXY_KEYRING_DIR:-/var/lib/mcpproxy/keyrings}"
+  local keyring_link="${HOME}/.local/share/keyrings"
+
+  mkdir -p "$persistent_dir" "$(dirname "$keyring_link")"
+  chmod 0700 "$persistent_dir"
+  if [ -e "$keyring_link" ] && [ ! -L "$keyring_link" ]; then
+    echo "keyring path exists and is not a symlink: ${keyring_link}" >&2
+    exit 1
+  fi
+  ln -sfn "$persistent_dir" "$keyring_link"
+
+  exec dbus-run-session -- /usr/local/bin/keyring-session.sh "$@"
+}
+
 if [ $# -gt 0 ]; then
   case "$1" in
     sh|bash|mcpproxy|node|npm|npx|python|python3|uv|uvx)
-      exec "$@"
+      run_with_keyring "$@"
       ;;
   esac
 fi
@@ -69,4 +88,4 @@ if [ -n "${MCPPROXY_READ_ONLY:-}" ]; then
   args+=(--read-only="$(bool_value "$MCPPROXY_READ_ONLY")")
 fi
 
-exec "${args[@]}" "$@"
+run_with_keyring "${args[@]}" "$@"

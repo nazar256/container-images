@@ -11,12 +11,15 @@ It is meant for a separate deployment from the broad local/coding-agent MCPProxy
 - Python 3.
 - `uv`/`uvx`.
 - `tini`.
+- GNOME Keyring, a private D-Bus session, and `secret-tool` for headless Linux
+  Secret Service support.
 - `procps` for lifecycle checks.
 - Non-root `mcpproxy` user.
 
 Persistent paths:
 
 - `/var/lib/mcpproxy` for MCPProxy data and default config.
+- `/var/lib/mcpproxy/keyrings` for the persistent passwordless keyring.
 - `/etc/mcpproxy` for mounted config files.
 - `/usr/local/lib/mcpproxy/wrappers` for wrapper scripts.
 
@@ -36,7 +39,35 @@ mcpproxy serve \
 
 ## Secret handling
 
-Prefer Docker Swarm secret files:
+Secret Service is enabled by default for MCPProxy-managed dynamic secrets. The
+entrypoint creates an ephemeral private D-Bus session, starts the Secret Service
+component of GNOME Keyring without a GUI or prompt, and then runs the requested
+command. This applies to the default command and custom commands such as
+`sh -lc 'exec mcpproxy serve ...'`.
+
+`dbus-run-session` owns the private bus for exactly the lifetime of that command;
+disconnecting the bus stops the keyring daemon. `tini -g` forwards container
+signals to the complete session process group, while the requested command's
+exit status is preserved.
+
+On first start, an empty password sent directly to `gnome-keyring-daemon`
+creates the passwordless login keyring and its default Secret Service
+collection. Later starts unlock that same collection non-interactively. Keyring
+files are stored in `/var/lib/mcpproxy/keyrings` through the supported
+`$HOME/.local/share/keyrings` location; the D-Bus socket remains ephemeral.
+Consequently, `/var/lib/mcpproxy` **must remain a writable persistent volume**
+across container and Swarm task replacement. Updating individual secrets
+through MCPProxy does not require a service restart.
+
+This passwordless keyring is deliberately not host-level encryption at rest.
+It keeps credentials out of MCP client-visible configuration and ordinary,
+long-lived application environment variables, but a host administrator, root,
+or a sufficiently privileged container shell can retrieve them. Set
+`MCPPROXY_DISABLE_KEYRING=true` only as a debugging escape hatch; MCPProxy's
+Secret Service-backed features will then be unavailable.
+
+Bootstrap and container-level secrets can still reasonably use Docker Swarm
+secret files. For example:
 
 ```bash
 MCPPROXY_API_KEY_FILE=/run/secrets/mcpproxy_admin_api_key
@@ -47,6 +78,16 @@ NEXTCLOUD_PASSWORD_FILE=/run/secrets/nextcloud_password
 ```
 
 The Nextcloud wrapper reads `*_FILE` values, exports the corresponding environment variables for the child STDIO MCP process, and never echoes secrets. This keeps raw backend secrets out of MCPProxy upstream `server.Env`; secrets still exist inside the child process environment within the container trust boundary.
+
+To verify Secret Service manually without printing the secret, use a disposable
+test attribute (with `/var/lib/mcpproxy` mounted persistently):
+
+```bash
+printf %s 'test-value' | secret-tool store \
+  --label='MCPProxy keyring check' service mcpproxy-check account smoke
+test "$(secret-tool lookup service mcpproxy-check account smoke)" = test-value
+secret-tool clear service mcpproxy-check account smoke
+```
 
 ## Nextcloud wrapper
 

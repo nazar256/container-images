@@ -53,11 +53,52 @@ jobs:
             command -v python3 >/dev/null
             command -v uv >/dev/null
             command -v uvx >/dev/null
+            command -v dbus-run-session >/dev/null
+            command -v gnome-keyring-daemon >/dev/null
+            command -v secret-tool >/dev/null
             test -x /usr/local/bin/docker-entrypoint.sh
+            test -x /usr/local/bin/keyring-session.sh
             test -x /usr/local/lib/mcpproxy/wrappers/run-nextcloud-mcp
           '
           docker run --rm --entrypoint mcpproxy local/mcpproxy-chatgpt:smoke --version >/dev/null
           docker run --rm --entrypoint uvx local/mcpproxy-chatgpt:smoke --version >/dev/null
+
+      - name: Verify headless Secret Service and persistence
+        run: |
+          set -euo pipefail
+          volume="mcpproxy-keyring-test-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          fresh_volume="${volume}-fresh"
+          cleanup() { docker volume rm -f "$volume" "$fresh_volume" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          docker run --rm local/mcpproxy-chatgpt:smoke sh -lc '
+            test "$(id -u)" = 10001
+            test -z "${DISPLAY:-}"
+            test -z "${WAYLAND_DISPLAY:-}"
+            ! env | grep -Eqi "(keyring.*password|password.*keyring)"
+            test -n "${DBUS_SESSION_BUS_ADDRESS:-}"
+            printf %s startup-probe | secret-tool store --label=startup-probe service __keyring_startup_probe__
+            test "$(secret-tool lookup service __keyring_startup_probe__)" = startup-probe
+            secret-tool clear service __keyring_startup_probe__
+          '
+          docker run --rm local/mcpproxy-chatgpt:smoke sh -lc 'exec mcpproxy --version' >/dev/null
+
+          docker volume create "$volume" >/dev/null
+          docker run --rm -v "$volume:/var/lib/mcpproxy" local/mcpproxy-chatgpt:smoke sh -lc '
+            printf %s "keyring-persistence-fixture" | secret-tool store --label="MCPProxy persistence test" service mcpproxy-smoke account persistence
+            test "$(secret-tool lookup service mcpproxy-smoke account persistence)" = "keyring-persistence-fixture"
+            test -n "$(find /var/lib/mcpproxy/keyrings -type f -print -quit)"
+          '
+          docker run --rm -v "$volume:/var/lib/mcpproxy" local/mcpproxy-chatgpt:smoke sh -lc '
+            test "$(secret-tool lookup service mcpproxy-smoke account persistence)" = "keyring-persistence-fixture"
+          '
+
+          docker volume create "$fresh_volume" >/dev/null
+          if docker run --rm -v "$fresh_volume:/var/lib/mcpproxy" local/mcpproxy-chatgpt:smoke sh -lc \
+              'secret-tool lookup service mcpproxy-smoke account persistence' >/dev/null 2>&1; then
+            echo "secret unexpectedly existed in a fresh volume" >&2
+            exit 1
+          fi
 
       - name: Smoke check entrypoint and Nextcloud wrapper
         run: |
@@ -91,13 +132,28 @@ jobs:
             -e MCPPROXY_API_KEY_FILE=/run/secrets/admin_api_key \
             local/mcpproxy-chatgpt:smoke)"
 
-          docker exec "$container_id" bash -ceu '
-            for i in $(seq 1 50); do
-              curl -fsS http://127.0.0.1:8080/api/v1/status -H "X-API-Key: dummy-admin-api-key" >/dev/null 2>/dev/null && exit 0
-              sleep 0.2
-            done
+          ready=false
+          for _ in $(seq 1 300); do
+            if docker exec "$container_id" curl -fsS \
+                http://127.0.0.1:8080/api/v1/status \
+                -H "X-API-Key: dummy-admin-api-key" >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' "$container_id")" != true ]; then
+              echo "mcpproxy container exited before becoming ready" >&2
+              docker logs "$container_id" >&2
+              docker inspect -f 'exit={{.State.ExitCode}} error={{.State.Error}}' "$container_id" >&2
+              exit 1
+            fi
+            sleep 0.2
+          done
+          if [ "$ready" != true ]; then
+            echo "mcpproxy did not become ready within 60 seconds" >&2
+            docker logs "$container_id" >&2
+            docker exec "$container_id" ps -ww -eo pid,ppid,args >&2 || true
             exit 1
-          '
+          fi
 
           docker exec "$container_id" bash -ceu '
             unauth_status="$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/mcp/call || true)"
@@ -107,8 +163,10 @@ jobs:
             fi
             processes="$(ps -ww -eo args=)"
             mcpproxy_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[m]cpproxy( |$)" || true)"
-            if [ "$mcpproxy_count" -ne 1 ]; then
-              echo "unexpected mcpproxy process count: $mcpproxy_count" >&2
+            dbus_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[d]bus-daemon( |$)" || true)"
+            keyring_count="$(printf "%s\n" "$processes" | grep -Ec "(^|/)[g]nome-keyring-daemon( |$)" || true)"
+            if [ "$mcpproxy_count" -ne 1 ] || [ "$dbus_count" -ne 1 ] || [ "$keyring_count" -ne 1 ]; then
+              echo "unexpected process counts: mcpproxy=$mcpproxy_count dbus=$dbus_count keyring=$keyring_count" >&2
               printf "%s\n" "$processes" >&2
               exit 1
             fi
