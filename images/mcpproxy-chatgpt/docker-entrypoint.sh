@@ -23,6 +23,97 @@ bool_value() {
   esac
 }
 
+prepare_keyring_directories() {
+  local keyring_dir=/var/lib/mcpproxy/keyrings
+  local keyring_link="$HOME/.local/share/keyrings"
+  local runtime_dir
+
+  if [ "$(id -u)" != 10001 ] || [ "$(id -g)" != 10001 ]; then
+    echo "keyring setup must run as UID/GID 10001" >&2
+    exit 1
+  fi
+
+  mkdir -p "$keyring_dir" "$HOME/.local/share"
+  chmod 0700 "$keyring_dir"
+
+  if [ -L "$keyring_link" ]; then
+    if [ "$(readlink "$keyring_link")" != "$keyring_dir" ]; then
+      echo "$keyring_link is an unexpected symlink; expected $keyring_dir" >&2
+      exit 1
+    fi
+  elif [ -e "$keyring_link" ]; then
+    echo "$keyring_link already exists and is not a symlink; refusing to replace it" >&2
+    exit 1
+  else
+    ln -s "$keyring_dir" "$keyring_link"
+  fi
+
+  runtime_dir="$(mktemp -d /tmp/mcpproxy-keyring-runtime.XXXXXX)"
+  chmod 0700 "$runtime_dir"
+  export XDG_RUNTIME_DIR="$runtime_dir"
+}
+
+start_keyring_daemon() {
+  local daemon_output line
+
+  if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    echo "private D-Bus session did not provide DBUS_SESSION_BUS_ADDRESS" >&2
+    exit 1
+  fi
+
+  daemon_output="$(gnome-keyring-daemon --start --components=secrets)" || {
+    echo "failed to start GNOME Keyring secrets component" >&2
+    exit 1
+  }
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^[A-Z_][A-Z0-9_]*= ]]; then
+      export "$line"
+    else
+      echo "gnome-keyring-daemon returned unexpected environment output: $line" >&2
+      exit 1
+    fi
+  done <<< "$daemon_output"
+
+  # On Debian Bookworm, an EOF on stdin is an empty password.  For an empty
+  # keyring directory this creates and unlocks the login collection without a
+  # prompt; on later starts it unlocks that same passwordless collection.
+  if ! gnome-keyring-daemon --unlock </dev/null >/dev/null; then
+    echo "failed to create or unlock the passwordless GNOME keyring" >&2
+    exit 1
+  fi
+
+  if ! dbus-send --session --type=method_call --print-reply \
+      --dest=org.freedesktop.secrets /org/freedesktop/secrets \
+      org.freedesktop.DBus.Peer.Ping >/dev/null; then
+    echo "GNOME Keyring did not acquire the org.freedesktop.secrets D-Bus name" >&2
+    exit 1
+  fi
+
+  # Storing and reading a disposable item verifies that the default collection
+  # exists and is unlocked. It also explicitly initializes it if necessary.
+  if ! printf '%s' ready | secret-tool store --label='MCPProxy keyring check' \
+      mcpproxy initialization-check >/dev/null ||
+      [ "$(secret-tool lookup mcpproxy initialization-check)" != ready ]; then
+    echo "GNOME Keyring default collection initialization failed" >&2
+    exit 1
+  fi
+  secret-tool clear mcpproxy initialization-check >/dev/null || {
+    echo "failed to remove GNOME Keyring initialization check" >&2
+    exit 1
+  }
+}
+
+if [ "${1:-}" = --keyring-session ]; then
+  shift
+  start_keyring_daemon
+else
+  prepare_keyring_directories
+  disable_keyring="$(bool_value "${MCPPROXY_DISABLE_KEYRING:-false}")"
+  if [ "$disable_keyring" = false ]; then
+    exec dbus-run-session -- "$0" --keyring-session "$@"
+  fi
+fi
+
 if [ $# -gt 0 ]; then
   case "$1" in
     sh|bash|mcpproxy|node|npm|npx|python|python3|uv|uvx)

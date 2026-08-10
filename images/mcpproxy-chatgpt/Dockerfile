@@ -22,6 +22,9 @@ RUN set -eux; \
         bash \
         ca-certificates \
         curl \
+        dbus-daemon \
+        gnome-keyring \
+        libsecret-tools \
         procps \
         python3 \
         python3-pip \
