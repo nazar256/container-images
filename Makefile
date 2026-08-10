@@ -128,10 +128,10 @@ smoke-image: podman-check
 		volume="mcpproxy-keyring-test-$$$$"; fresh_volume="$${volume}-fresh"; \
 		trap 'podman volume rm -f "$${volume}" "$${fresh_volume}" >/dev/null 2>&1 || true' EXIT; \
 		podman volume create "$${volume}" >/dev/null; \
-		podman run --rm -v "$${volume}:/var/lib/mcpproxy" $(LOCAL_TAG_PREFIX)$(IMAGE):test sh -lc 'printf %s "keyring-persistence-fixture" | secret-tool store --label="MCPProxy persistence test" service mcpproxy-smoke account persistence; test "$$(secret-tool lookup service mcpproxy-smoke account persistence)" = "keyring-persistence-fixture"; test -n "$$(find /var/lib/mcpproxy/keyrings -type f -print -quit)"'; \
-		podman run --rm -v "$${volume}:/var/lib/mcpproxy" $(LOCAL_TAG_PREFIX)$(IMAGE):test sh -lc 'test "$$(secret-tool lookup service mcpproxy-smoke account persistence)" = "keyring-persistence-fixture"'; \
+		podman run --rm -e MCPPROXY_DATA_DIR=/var/lib/mcpproxy/alternate -v "$${volume}:/var/lib/mcpproxy" $(LOCAL_TAG_PREFIX)$(IMAGE):test sh -lc 'printf %s "keyring-persistence-fixture" | secret-tool store --label="MCPProxy persistence test" service mcpproxy-smoke account persistence; test "$$(secret-tool lookup service mcpproxy-smoke account persistence)" = "keyring-persistence-fixture"; test -n "$$(find /var/lib/mcpproxy/alternate/keyrings -type f -print -quit)"'; \
+		podman run --rm -e MCPPROXY_DATA_DIR=/var/lib/mcpproxy/alternate -v "$${volume}:/var/lib/mcpproxy" $(LOCAL_TAG_PREFIX)$(IMAGE):test sh -lc 'test "$$(secret-tool lookup service mcpproxy-smoke account persistence)" = "keyring-persistence-fixture"'; \
 		podman volume create "$${fresh_volume}" >/dev/null; \
-		if podman run --rm -v "$${fresh_volume}:/var/lib/mcpproxy" $(LOCAL_TAG_PREFIX)$(IMAGE):test sh -lc 'secret-tool lookup service mcpproxy-smoke account persistence' >/dev/null 2>&1; then echo 'secret unexpectedly existed in a fresh volume' >&2; exit 1; fi; \
+		if podman run --rm -e MCPPROXY_DATA_DIR=/var/lib/mcpproxy/alternate -v "$${fresh_volume}:/var/lib/mcpproxy" $(LOCAL_TAG_PREFIX)$(IMAGE):test sh -lc 'secret-tool lookup service mcpproxy-smoke account persistence' >/dev/null 2>&1; then echo 'secret unexpectedly existed in a fresh volume' >&2; exit 1; fi; \
 		podman volume rm "$${volume}" "$${fresh_volume}" >/dev/null; trap - EXIT; \
 		mkdir -p .tmp/mcpproxy-chatgpt-smoke; \
 		if podman run --rm $(LOCAL_TAG_PREFIX)$(IMAGE):test >.tmp/mcpproxy-chatgpt-smoke/missing-api-key.log 2>&1; then \

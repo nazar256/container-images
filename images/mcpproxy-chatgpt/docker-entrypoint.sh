@@ -28,7 +28,8 @@ run_with_keyring() {
     exec "$@"
   fi
 
-  local persistent_dir="${MCPPROXY_KEYRING_DIR:-/var/lib/mcpproxy/keyrings}"
+  local data_dir="${MCPPROXY_DATA_DIR:-/var/lib/mcpproxy}"
+  local persistent_dir="${MCPPROXY_KEYRING_DIR:-${data_dir}/keyrings}"
   local keyring_link="${HOME}/.local/share/keyrings"
 
   mkdir -p "$persistent_dir" "$(dirname "$keyring_link")"

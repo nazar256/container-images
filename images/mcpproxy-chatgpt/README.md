@@ -53,11 +53,12 @@ exit status is preserved.
 On first start, an empty password sent directly to `gnome-keyring-daemon`
 creates the passwordless login keyring and its default Secret Service
 collection. Later starts unlock that same collection non-interactively. Keyring
-files are stored in `/var/lib/mcpproxy/keyrings` through the supported
-`$HOME/.local/share/keyrings` location; the D-Bus socket remains ephemeral.
-Consequently, `/var/lib/mcpproxy` **must remain a writable persistent volume**
-across container and Swarm task replacement. Updating individual secrets
-through MCPProxy does not require a service restart.
+files default to `${MCPPROXY_DATA_DIR:-/var/lib/mcpproxy}/keyrings` through the
+supported `$HOME/.local/share/keyrings` location; the D-Bus socket remains
+ephemeral. `MCPPROXY_KEYRING_DIR` can override the keyring location separately.
+Consequently, the configured MCPProxy data directory **must remain a writable
+persistent volume** across container and Swarm task replacement. Updating
+individual secrets through MCPProxy does not require a service restart.
 
 This passwordless keyring is deliberately not host-level encryption at rest.
 It keeps credentials out of MCP client-visible configuration and ordinary,
