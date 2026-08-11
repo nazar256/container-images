@@ -6,11 +6,15 @@ on:
       - master
     paths:
       - images/mcpproxy-chatgpt/**
+      - scripts/resolve-github-release.sh
+      - scripts/test-version-resolvers.sh
       - .github/workflows/build-mcpproxy-chatgpt.yml
       - .github/workflows/_reusable-build-and-push.yml
   pull_request:
     paths:
       - images/mcpproxy-chatgpt/**
+      - scripts/resolve-github-release.sh
+      - scripts/test-version-resolvers.sh
       - .github/workflows/build-mcpproxy-chatgpt.yml
       - .github/workflows/_reusable-build-and-push.yml
   workflow_dispatch:
@@ -26,10 +30,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Test version resolvers
+        run: scripts/test-version-resolvers.sh
+
       - name: Resolve build args
         id: resolve
         run: |
-          mcpproxy_version="0.33.5"
+          mcpproxy_version="$(scripts/resolve-github-release.sh smart-mcp-proxy/mcpproxy-go)"
           uv_version="0.7.13"
           echo "mcpproxy_version=${mcpproxy_version}" >> "$GITHUB_OUTPUT"
           echo "uv_version=${uv_version}" >> "$GITHUB_OUTPUT"

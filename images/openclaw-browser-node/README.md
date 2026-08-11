@@ -5,7 +5,7 @@ Chromium + OpenClaw node host image built on top of LinuxServer Chromium.
 ## Design choices
 
 - Base image defaults to `docker.io/linuxserver/chromium` and is pinned by build arg `CHROMIUM_VERSION` (default: `version-09bef544`).
-- Node.js is pinned by build arg `NODE_VERSION` (default: `22.14.0`) to satisfy current OpenClaw runtime requirements.
+- Node.js tracks the latest compatible Node 22 release through build arg `NODE_VERSION` (default: `22`) to satisfy current OpenClaw runtime requirements.
 - OpenClaw CLI is installed from npm and pinned by build arg `OPENCLAW_VERSION` (default: `2026.4.9`).
 - Node connectivity defaults to `OPENCLAW_GATEWAY_HOST=openclaw-gateway` and `OPENCLAW_GATEWAY_PORT=3443`.
 - Chromium CDP is enabled for the interactive browser with `--remote-debugging-address=127.0.0.1`, `--remote-debugging-port=${CDP_PORT}`, and the persistent `CHROMIUM_USER_DATA_DIR` profile.
@@ -19,7 +19,7 @@ Chromium + OpenClaw node host image built on top of LinuxServer Chromium.
 podman build \
   -t openclaw-browser-node:local \
   --build-arg CHROMIUM_VERSION=version-09bef544 \
-  --build-arg NODE_VERSION=22.14.0 \
+  --build-arg NODE_VERSION=22 \
   --build-arg OPENCLAW_VERSION=2026.4.9 \
   -f images/openclaw-browser-node/Dockerfile \
   images/openclaw-browser-node

@@ -21,11 +21,15 @@ Incoming `mcp-proxy` API-key authentication is required by default. Startup fail
 ```bash
 docker build \
   -t chrome-devtools-mcp-proxy:local \
-  --build-arg MCP_PROXY_VERSION=6.5.1 \
-  --build-arg CHROME_DEVTOOLS_MCP_VERSION=1.0.1 \
+  --build-arg MCP_PROXY_VERSION=^6.5.1 \
+  --build-arg CHROME_DEVTOOLS_MCP_VERSION=^1.0.1 \
   -f images/chrome-devtools-mcp-proxy/Dockerfile \
   images/chrome-devtools-mcp-proxy
 ```
+
+Those defaults select the newest releases in the currently supported major
+versions. CI resolves each range once before the smoke build, then passes the
+same exact versions to the publish build.
 
 ## Smoke check
 

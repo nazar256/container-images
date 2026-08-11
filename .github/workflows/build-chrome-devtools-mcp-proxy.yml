@@ -6,11 +6,15 @@ on:
       - master
     paths:
       - images/chrome-devtools-mcp-proxy/**
+      - scripts/resolve-npm-version.sh
+      - scripts/test-version-resolvers.sh
       - .github/workflows/build-chrome-devtools-mcp-proxy.yml
       - .github/workflows/_reusable-build-and-push.yml
   pull_request:
     paths:
       - images/chrome-devtools-mcp-proxy/**
+      - scripts/resolve-npm-version.sh
+      - scripts/test-version-resolvers.sh
       - .github/workflows/build-chrome-devtools-mcp-proxy.yml
       - .github/workflows/_reusable-build-and-push.yml
   workflow_dispatch:
@@ -26,11 +30,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Test version resolvers
+        run: scripts/test-version-resolvers.sh
+
       - name: Resolve build args
         id: resolve
         run: |
-          mcp_proxy_version="6.5.1"
-          chrome_devtools_mcp_version="1.0.1"
+          # Stay within the current major versions: both packages publish
+          # semver releases, so major-version ranges admit compatible fixes and
+          # features without automatically accepting breaking changes.
+          mcp_proxy_version="$(scripts/resolve-npm-version.sh mcp-proxy '^6.5.1')"
+          chrome_devtools_mcp_version="$(scripts/resolve-npm-version.sh chrome-devtools-mcp '^1.0.1')"
           echo "mcp_proxy_version=${mcp_proxy_version}" >> "$GITHUB_OUTPUT"
           echo "chrome_devtools_mcp_version=${chrome_devtools_mcp_version}" >> "$GITHUB_OUTPUT"
 
