@@ -1,4 +1,4 @@
-ARG NODE_VERSION=22.14.0
+ARG NODE_VERSION=22
 ARG CHROMIUM_VERSION=version-09bef544
 FROM docker.io/library/node:${NODE_VERSION}-bookworm-slim AS node
 

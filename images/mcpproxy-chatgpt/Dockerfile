@@ -2,7 +2,7 @@
 
 FROM docker.io/library/node:22-bookworm-slim
 
-ARG MCPPROXY_VERSION=0.33.5
+ARG MCPPROXY_VERSION=latest
 ARG UV_VERSION=0.7.13
 ARG TARGETARCH
 
@@ -29,6 +29,15 @@ RUN set -eux; \
         python3 \
         python3-pip \
         tini; \
+    mcpproxy_version="${MCPPROXY_VERSION}"; \
+    if [ "$mcpproxy_version" = "latest" ]; then \
+        release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/smart-mcp-proxy/mcpproxy-go/releases/latest)"; \
+        mcpproxy_version="${release_url##*/v}"; \
+        if ! printf '%s' "$mcpproxy_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then \
+            echo "could not resolve latest MCPProxy release from ${release_url}" >&2; \
+            exit 1; \
+        fi; \
+    fi; \
     target_arch="${TARGETARCH}"; \
     if [ -z "$target_arch" ]; then \
         target_arch="$(dpkg --print-architecture)"; \
@@ -39,7 +48,7 @@ RUN set -eux; \
         aarch64) mcpproxy_arch="arm64" ;; \
         *) echo "unsupported target architecture: ${target_arch}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL "https://github.com/smart-mcp-proxy/mcpproxy-go/releases/download/v${MCPPROXY_VERSION}/mcpproxy-${MCPPROXY_VERSION}-linux-${mcpproxy_arch}.tar.gz" \
+    curl -fsSL "https://github.com/smart-mcp-proxy/mcpproxy-go/releases/download/v${mcpproxy_version}/mcpproxy-${mcpproxy_version}-linux-${mcpproxy_arch}.tar.gz" \
         | tar -xz -C /usr/local/bin mcpproxy; \
     chmod 0755 /usr/local/bin/mcpproxy; \
     python3 -m pip install --no-cache-dir "uv==${UV_VERSION}"; \

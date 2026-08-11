@@ -2,8 +2,8 @@
 
 FROM docker.io/library/node:22-bookworm-slim
 
-ARG MCP_PROXY_VERSION=6.5.1
-ARG CHROME_DEVTOOLS_MCP_VERSION=1.0.1
+ARG MCP_PROXY_VERSION=^6.5.1
+ARG CHROME_DEVTOOLS_MCP_VERSION=^1.0.1
 
 ENV HOME=/home/node \
     NODE_ENV=production \

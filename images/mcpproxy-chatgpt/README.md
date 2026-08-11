@@ -6,7 +6,10 @@ It is meant for a separate deployment from the broad local/coding-agent MCPProxy
 
 ## Includes
 
-- MCPProxy.app `mcpproxy` v0.33.5 from the official release tarball.
+- The latest MCPProxy.app `mcpproxy` release from the official release tarball
+  by default. An exact version can still be supplied with
+  `--build-arg MCPPROXY_VERSION=<version>` for reproducing or rolling back a
+  build.
 - Node.js 22 with `npm`/`npx`.
 - Python 3.
 - `uv`/`uvx`.

@@ -50,6 +50,34 @@ File pattern: `.github/workflows/build-<image_name>.yml`
 
 The same tag scheme is used for both GHCR and Docker Hub when Docker Hub is enabled.
 
+## Upstream tool version policy
+
+Builds deliberately float only dependencies whose compatibility risk is low
+enough for this repository's smoke tests to manage:
+
+- `mcpproxy-chatgpt` resolves the latest MCPProxy release for every CI build,
+  and its Dockerfile does the same for local builds unless an exact
+  `MCPPROXY_VERSION` is supplied.
+- `chrome-devtools-mcp-proxy` selects the latest `mcp-proxy` 6.x and
+  `chrome-devtools-mcp` 1.x releases. CI resolves each range once and reuses
+  those exact versions for its smoke and publish builds.
+- `openclaw-browser-node` tracks the latest Node.js 22 image. Remaining on the
+  same LTS major version makes patch and minor runtime updates highly likely to
+  remain compatible.
+
+The following versions remain fixed because their backwards-compatibility
+confidence is below the 85% threshold:
+
+- `uv`, the OpenClaw CLI, and the opencode Telegram bot are pre-1.0 or do not
+  offer a stable-major compatibility boundary suitable for unattended updates.
+- The opencode Telegram bot image also replaces files inside the package's
+  compiled `dist` tree, making an unattended package update especially risky.
+- LinuxServer Chromium uses immutable, non-semver tags and the image relies on
+  details of its launcher.
+- The telegram transcription bot's Python packages are application runtime
+  dependencies rather than interchangeable build tools; their major-version
+  upgrades require source-level review.
+
 ## Job permissions
 
 Workflows use:
