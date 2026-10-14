@@ -27,9 +27,9 @@ Rules for automation agents working in this repository.
 
 ## Local validation (mandatory)
 
-- Use only Podman for local image validation in this repository.
+- Prefer Podman for local image validation in this repository. Docker is allowed as a fallback when Podman is unavailable or cannot be used.
 - After changing image code, Dockerfiles, scripts, or workflows, run local tests before finishing work.
-- Preferred command: `make local-test` (or `make local-test IMAGE=<image_name>` for targeted checks).
+- Preferred command with Podman: `make local-test` (or `make local-test IMAGE=<image_name>` for targeted checks). The Makefile invokes Podman; when using Docker as a fallback, run equivalent build and smoke checks with Docker.
 - Treat local test failures as blocking and fix them before finalizing changes.
 
 ## Commit style
