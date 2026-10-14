@@ -20,12 +20,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  smoke:
-    strategy:
-      matrix:
-        runner: [ubuntu-latest, ubuntu-24.04-arm]
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       mcpproxy_version: ${{ steps.resolve.outputs.mcpproxy_version }}
       uv_version: ${{ steps.resolve.outputs.uv_version }}
@@ -44,12 +41,23 @@ jobs:
           echo "mcpproxy_version=${mcpproxy_version}" >> "$GITHUB_OUTPUT"
           echo "uv_version=${uv_version}" >> "$GITHUB_OUTPUT"
 
+  smoke:
+    needs: resolve
+    strategy:
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Build smoke image
         run: |
           docker build \
             -t local/mcpproxy-chatgpt:smoke \
-            --build-arg MCPPROXY_VERSION=${{ steps.resolve.outputs.mcpproxy_version }} \
-            --build-arg UV_VERSION=${{ steps.resolve.outputs.uv_version }} \
+            --build-arg MCPPROXY_VERSION=${{ needs.resolve.outputs.mcpproxy_version }} \
+            --build-arg UV_VERSION=${{ needs.resolve.outputs.uv_version }} \
             -f images/mcpproxy-chatgpt/Dockerfile \
             images/mcpproxy-chatgpt
 
@@ -71,7 +79,7 @@ jobs:
             test -x /usr/local/lib/mcpproxy/wrappers/run-nextcloud-mcp
           '
           docker run --rm --entrypoint mcpproxy local/mcpproxy-chatgpt:smoke version -o json \
-            | jq -e --arg version "v${{ steps.resolve.outputs.mcpproxy_version }}" '.version == $version'
+            | jq -e --arg version "v${{ needs.resolve.outputs.mcpproxy_version }}" '.version == $version'
           docker run --rm --entrypoint uvx local/mcpproxy-chatgpt:smoke --version >/dev/null
 
       - name: Verify headless Secret Service and persistence
@@ -186,7 +194,7 @@ jobs:
           '
 
   build:
-    needs: smoke
+    needs: [resolve, smoke]
     permissions:
       contents: read
       packages: write
@@ -199,5 +207,5 @@ jobs:
       context: images/mcpproxy-chatgpt
       dockerfile: images/mcpproxy-chatgpt/Dockerfile
       build_args: |
-        MCPPROXY_VERSION=${{ needs.smoke.outputs.mcpproxy_version }}
-        UV_VERSION=${{ needs.smoke.outputs.uv_version }}
+        MCPPROXY_VERSION=${{ needs.resolve.outputs.mcpproxy_version }}
+        UV_VERSION=${{ needs.resolve.outputs.uv_version }}
