@@ -70,7 +70,9 @@ COPY --chown=root:root docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY --chown=root:root keyring-session.sh /usr/local/bin/keyring-session.sh
 COPY --chown=root:root wrappers/run-nextcloud-mcp /usr/local/lib/mcpproxy/wrappers/run-nextcloud-mcp
 
-RUN chmod 0755 \
+# Version probes can create caches under HOME while the build runs as root.
+RUN chown -R mcpproxy:mcpproxy /home/mcpproxy \
+    && chmod 0755 \
         /usr/local/bin/docker-entrypoint.sh \
         /usr/local/bin/keyring-session.sh \
         /usr/local/lib/mcpproxy/wrappers/run-nextcloud-mcp

@@ -21,7 +21,10 @@ on:
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     outputs:
       mcpproxy_version: ${{ steps.resolve.outputs.mcpproxy_version }}
@@ -67,7 +70,8 @@ jobs:
             test -x /usr/local/bin/keyring-session.sh
             test -x /usr/local/lib/mcpproxy/wrappers/run-nextcloud-mcp
           '
-          docker run --rm --entrypoint mcpproxy local/mcpproxy-chatgpt:smoke --version >/dev/null
+          docker run --rm --entrypoint mcpproxy local/mcpproxy-chatgpt:smoke version -o json \
+            | jq -e --arg version "v${{ steps.resolve.outputs.mcpproxy_version }}" '.version == $version'
           docker run --rm --entrypoint uvx local/mcpproxy-chatgpt:smoke --version >/dev/null
 
       - name: Verify headless Secret Service and persistence
